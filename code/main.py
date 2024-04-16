@@ -73,8 +73,8 @@ if __name__ == "__main__":
         clsTrainer = CLSTrainer(args)
         num_classes = len(label_idx_map)
         print("Load models...")
-        mtlTrainer.load(num_classes = num_classes, saved_model_path = args.saved_model_path+args.event_type+"/phase1.pt")
-        clsTrainer.load(num_classes = num_classes, saved_model_path = args.saved_model_path+args.event_type+"/phase2.pt")
+        mtlTrainer.load(num_classes = num_classes, saved_model_path = args.saved_model_path+"phase1.pt")
+        clsTrainer.load(num_classes = num_classes, saved_model_path = args.saved_model_path+"phase2.pt")
 
         print("Read new data...")
         new_data = []
@@ -116,10 +116,10 @@ if __name__ == "__main__":
             #train models on entire data
             mtlTrainer = MTLTrainer(args, text_data, cls_data, exp_data)
             print(">>>>> Phase 1...........")
-            train_exp_data, train_labels = mtlTrainer.train(saved_model_path = args.saved_model_path+args.event_type+"/phase1.pt")
+            train_exp_data, train_labels = mtlTrainer.train(saved_model_path = args.saved_model_path+"phase1.pt")
             print(">>>>> Phase 2...........")
             clsTrainer = CLSTrainer(args, train_exp_data, cls_data)
-            clsTrainer.train(saved_model_path = args.saved_model_path + args.event_type+"/phase2.pt")
+            clsTrainer.train(saved_model_path = args.saved_model_path + "phase2.pt")
 
         elif args.mode == "eval":
             mtlTrainer = MTLTrainer(args, text_data, cls_data, exp_data)
