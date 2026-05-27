@@ -3,11 +3,14 @@ set -euxo pipefail
 
 MODEL="${MODEL:-xlm-roberta-large}"
 MODEL_THING="$(echo "$MODEL" | tr '/' '_')"
-MODEL_PATH="${MODEL_PATH:-./data/saved_models/$MODEL_THING/}"
 
-TRAIN_FILE="${TRAIN_FILE:-./data/train_ru.tsv}"
-VALID_FILE="${VALID_FILE:-./data/validate_ru.tsv}"
-TEST_FILE="${TEST_FILE:-./data/test_ru.tsv}"
+SAVED_MODELS_DIR="${SAVED_MODELS_DIR:-./data/saved_models}"
+MODEL_PATH="${MODEL_PATH:-$SAVED_MODELS_DIR/$MODEL_THING/}"
+
+DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"
+TRAIN_FILE="${TRAIN_FILE:-$DATA_DIR/train_ru.tsv}"
+VALID_FILE="${VALID_FILE:-$DATA_DIR/validate_ru.tsv}"
+TEST_FILE="${TEST_FILE:-$DATA_DIR/test_ru.tsv}"
 
 N_EPOCHS="${N_EPOCHS:-5}"
 PATIENCE="${PATIENCE:-3}"

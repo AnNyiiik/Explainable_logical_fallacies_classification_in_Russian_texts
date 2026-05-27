@@ -3,12 +3,15 @@ set -euxo pipefail
 
 MODEL="${MODEL:-deepvk/USER-bge-m3}"
 MODEL_THING="$(echo "$MODEL" | tr '/' '_')"
-OPTUNA_DIR="${OPTUNA_DIR:-./data/optuna/$MODEL_THING/}"
+
+OPTUNA_ROOT="${OPTUNA_ROOT:-./data/optuna}"
+OPTUNA_DIR="${OPTUNA_DIR:-$OPTUNA_ROOT/$MODEL_THING/}"
 mkdir -p "$OPTUNA_DIR"
 
-TRAIN_FILE="${TRAIN_FILE:-./data/train_ru.tsv}"
-VALID_FILE="${VALID_FILE:-./data/validate_ru.tsv}"
-TEST_FILE="${TEST_FILE:-./data/test_ru.tsv}"
+DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"
+TRAIN_FILE="${TRAIN_FILE:-$DATA_DIR/train_ru.tsv}"
+VALID_FILE="${VALID_FILE:-$DATA_DIR/validate_ru.tsv}"
+TEST_FILE="${TEST_FILE:-$DATA_DIR/test_ru.tsv}"
 
 MAX_LEN="${MAX_LEN:-256}"
 CLS_HIDDEN_SIZE="${CLS_HIDDEN_SIZE:-128}"

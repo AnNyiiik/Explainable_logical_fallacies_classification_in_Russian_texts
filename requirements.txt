@@ -1,0 +1,29 @@
+# Core ML stack
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=3.0.0
+datasets>=2.14.0
+accelerate>=0.20.0
+
+# Scientific / data
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+scipy>=1.10.0
+
+# Hyperparameter tuning & experiment tracking
+optuna>=3.4.0
+wandb>=0.16.0
+joblib>=1.3.0
+
+# API clients (data generation, few-shot, translation)
+openai>=1.0.0
+deepl>=1.16.0
+
+# Utilities
+tqdm>=4.65.0
+
+# Optional: HuggingFace tokenizer extras (BERTweet etc.)
+emoji>=2.0.0
+sentencepiece>=0.1.99
+protobuf>=3.20.0
