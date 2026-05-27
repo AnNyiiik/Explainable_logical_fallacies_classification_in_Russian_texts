@@ -25,8 +25,7 @@ torch.manual_seed(54321)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# Default per-class weights (order must match label_idx_map below).
-# Used as a fallback when -class_weights is not passed on the command line.
+#default per-class weights
 DEFAULT_CLASS_WEIGHTS = [
     1.0,  # ad hominem
     1.5,  # ad populum
@@ -272,7 +271,7 @@ if __name__ == "__main__":
 
             print("\n" + "=" * 60)
             print("Training completed successfully!")
-            print(f"📁 Models saved to: {args.saved_model_path}")
+            print(f"Models saved to: {args.saved_model_path}")
             print("   - phase1.pt (Phase 1 weights)")
             print("   - phase2.pt (Phase 2 weights)")
             print("   - phase1_best_checkpoint.pt (full Phase 1 checkpoint)")
