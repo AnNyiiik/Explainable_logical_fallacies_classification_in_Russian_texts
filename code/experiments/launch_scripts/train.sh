@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-MODEL="${MODEL:-xlm-roberta-large}"
+MODEL="${MODEL:-deepvk/USER-bge-m3}"
 MODEL_THING="$(echo "$MODEL" | tr '/' '_')"
 
 SAVED_MODELS_DIR="${SAVED_MODELS_DIR:-./data/saved_models}"

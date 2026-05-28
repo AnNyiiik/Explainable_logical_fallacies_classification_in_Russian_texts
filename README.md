@@ -12,10 +12,8 @@ This repository is a research codebase oriented toward **reproducibility**: all
 experiments are driven by parameterized shell scripts, and all data-generation
 utilities are configurable via command-line arguments and environment variables.
 
-> **Note:** the multi-class stage adapts the
-> [TACEI](https://github.com/thi-huyennguyen/TACEI) architecture to
-> Russian-language logical-fallacy detection.
-> <!-- TODO: cite the original paper and your own report/thesis here -->
+The multi-class stage adapts the [TACEI](https://github.com/thi-huyennguyen/TACEI)
+architecture to Russian-language logical-fallacy detection.
 
 ## Task
 
@@ -75,23 +73,27 @@ weighting, early stopping, and full-checkpoint saving.
 │   ├── tweet_preprocessing.py           #   Cyrillic-safe text normalization
 │   ├── train_contrastive.py             #   Contrastive fine-tuning of the encoder
 │   ├── train_binary_classifier.py       #   Binary fallacy / neutral classifier
-│   ├── few-shot.py                      #   Few-shot / zero-shot LLM baseline
 │   ├── data_generation/                 #   Synthetic data generation utilities
 │   │   ├── data_generation.py           #     Fallacy example generator
 │   │   ├── generate_neutral_examples.py #     Neutral example generator
 │   │   ├── neutralize_examples.py       #     Build contrastive (fallacy, neutral) pairs
 │   │   ├── translate_data_with_gpt.py   #     DeepL + LLM span-aligned translation
+│   │   ├── prompts_for_data_generation/ #     Prompts for fallacy generation (per class)
+│   │   ├── prompts_for_contrastive_pairs/ #   Prompts for neutralization / contrastive pairs
 │   │   └── README.md
-│   ├── experiments/                     #   Reproducible run scripts
-│   │   ├── train.sh                     #     TACEI training (multilingual default)
-│   │   ├── train_USER-bge.sh            #     TACEI training, deepvk/USER-bge-m3
-│   │   ├── train_roberta_large.sh       #     TACEI training, roberta-large (EN)
-│   │   ├── tune_ru.sh / tune_en.sh      #     Optuna hyperparameter search
-│   │   ├── prediction.sh                #     Inference
-│   │   ├── test_roberta_large.sh        #     Extract text from TSV → run inference
-│   │   ├── train_contrastive.sh         #     Contrastive encoder fine-tuning
-│   │   ├── train_binary_classifier.sh   #     Binary classifier training
-│   │   ├── few-shot.sh                  #     Few-shot / zero-shot baseline
+│   ├── experiments/                     #   Experiment entry points
+│   │   ├── few-shot.py                  #     Few-shot / zero-shot LLM baseline
+│   │   ├── launch_scripts/              #     Parameterized run scripts (.sh)
+│   │   │   ├── train.sh                 #       TACEI training (multilingual default)
+│   │   │   ├── train_USER-bge.sh        #       TACEI training, deepvk/USER-bge-m3
+│   │   │   ├── train_roberta_large.sh   #       TACEI training, roberta-large (EN)
+│   │   │   ├── tune_USER-bge.sh         #       Optuna search (RU)
+│   │   │   ├── tune_roberta.sh          #       Optuna search (EN)
+│   │   │   ├── prediction.sh            #       Inference
+│   │   │   ├── test_roberta_large.sh    #       Extract text from TSV → run inference
+│   │   │   ├── pretrain_encoder_contrastive.sh  # Contrastive encoder fine-tuning
+│   │   │   ├── train_binary.sh          #       Binary classifier training
+│   │   │   └── few-shot.sh              #       Few-shot / zero-shot baseline
 │   │   └── README.md
 │   └── README.md
 ├── data/
@@ -101,10 +103,25 @@ weighting, early stopping, and full-checkpoint saving.
 └── README.md                            # This file
 ```
 
+> **Note.** Trained checkpoints are not committed to the repository. Their
+> location is controlled per-script by the `MODEL_PATH` environment variable
+> (e.g. `MODEL_PATH=./data/saved_models/$MODEL_THING/`). See
+> `code/experiments/README.md` for all overridable variables.
+
 ## Installation
 
-The project uses [**uv**](https://docs.astral.sh/uv/) for dependency management
-(the run scripts call `uv run python ...`).
+The project uses [**uv**](https://docs.astral.sh/uv/) as the primary
+environment manager (the run scripts call `uv run python ...`), but a plain
+`pip` workflow is also supported.
+
+### Requirements
+
+- Python ≥ 3.10
+- For training: a CUDA-capable GPU (≥ 12 GB VRAM recommended for
+  `roberta-large`, `xlm-roberta-large`, `deepvk/USER-bge-m3` at
+  `max_len=512`).
+- For data generation / few-shot baselines: an OpenAI-compatible API key
+  (ProxyAPI) and optionally a DeepL key (translation only).
 
 ### Option A — uv (recommended)
 
@@ -112,48 +129,64 @@ The project uses [**uv**](https://docs.astral.sh/uv/) for dependency management
 # Install uv if you don't have it
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone the repository
+# Clone
 git clone https://github.com/AnNyiiik/Explainable_logical_fallacies_classification_in_Russian_texts.git
 cd Explainable_logical_fallacies_classification_in_Russian_texts
 
-# Create the environment and install dependencies from pyproject.toml / uv.lock
-uv sync
+# Resolve & install all dependencies into a project-local .venv
+uv venv
+uv pip install -r requirements.txt
 ```
 
-After `uv sync`, every script can be run with `uv run python ...` or the
-provided `.sh` wrappers, and uv resolves the environment automatically.
+If `pyproject.toml` / `uv.lock` are present, `uv sync` does the same in one
+step.
 
 ### Option B — pip + venv
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt    # TODO: export requirements if not present
+
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-<!-- TODO: confirm the Python version. The scripts target Python >= 3.10. -->
+### PyTorch with CUDA
 
-### GPU / hardware notes
+`pip install torch` installs the CPU build by default. For GPU training,
+install the CUDA build that matches your driver — for example, CUDA 12.1:
 
-Training large encoders (e.g. `roberta-large`, `xlm-roberta-large`,
-`deepvk/USER-bge-m3`) at `max_len=512` requires a CUDA GPU. The scripts use a
-small physical batch size with gradient accumulation and mixed precision to fit
-long sequences in memory.
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
+
+See the [PyTorch install matrix](https://pytorch.org/get-started/locally/) for
+the right index URL for your system.
+
+### API keys (only for data generation / few-shot)
+
+These scripts read secrets from the environment — never commit keys to git:
+
+```bash
+export PROXYAPI_KEY="sk-..."     # OpenAI-compatible endpoint (ProxyAPI)
+export DEEPL_AUTH_KEY="..."      # only for translate_data_with_gpt.py
+```
+
+The shell scripts in `code/experiments/` do **not** pass the key as a flag
+(it would leak into `set -x` logs and shell history), so exporting the
+variable is required.
 
 ## Data
 
 ### Binary detection (`data/binary_detection_data/`)
 
-Contrastive pairs and auxiliary examples used by `train_contrastive.py` and
-`train_binary_classifier.py`:
+Inputs used by `train_contrastive.py` and `train_binary_classifier.py`:
 
 | File | Schema | Used for |
 |------|--------|----------|
 | `all_pairs.json` | `{original_text, neutral_text, original_label}` | contrastive pairs + binary labels |
 | `extra_fallacies.json` | `[{text}, ...]` or `[str, ...]` (optional) | extra positive (fallacy) examples |
 | `extra_neutrals.json` | `[{text}, ...]` or `[str, ...]` (optional) | extra negative (neutral) examples |
-
-<!-- TODO: confirm exact filenames/paths inside binary_detection_data/. -->
 
 ### Multi-class TACEI (`data/multiclass_TACEI_data/`)
 
@@ -171,23 +204,26 @@ Expected splits: `train_{ru,en}.tsv`, `validate_{ru,en}.tsv`, `test_{ru,en}.tsv`
 
 ```bash
 # --- Binary detection stage ---
-# 1) contrastively fine-tune the encoder, then 2) train the binary classifier
-uv run python ./code/train_contrastive.py
-uv run python ./code/train_binary_classifier.py
+./code/experiments/launch_scripts/pretrain_encoder_contrastive.sh   # 1) fine-tune encoder
+./code/experiments/launch_scripts/train_binary.sh                   # 2) train binary head
 
 # --- Multi-class TACEI stage ---
-# Train on Russian data with the default multilingual encoder
-./experiments/train.sh
-
-# Override the model / hyperparameters without editing the script
-MODEL="deepvk/USER-bge-m3" LR=1e-5 N_EPOCHS=10 ./experiments/train.sh
+./code/experiments/launch_scripts/train.sh                          # train with defaults (RU, deepvk/USER-bge-m3)
+MODEL="deepvk/USER-bge-m3" LR=1e-5 N_EPOCHS=10 ./code/experiments/launch_scripts/train.sh
 
 # Hyperparameter search
-N_TRIALS=50 ./experiments/tune_ru.sh
+N_TRIALS=50 ./code/experiments/launch_scripts/tune_USER-bge.sh
 
 # Inference with a trained TACEI model
-MODEL="roberta-large" ./experiments/prediction.sh
+MODEL="roberta-large" ./code/experiments/launch_scripts/prediction.sh
+
+# --- LLM baseline ---
+export PROXYAPI_KEY="..."
+MODE=both ./code/experiments/launch_scripts/few-shot.sh
 ```
+
+All scripts accept any parameter as an environment variable; see
+`code/experiments/README.md` for the full list per script.
 
 ## Reproducibility
 
@@ -196,3 +232,6 @@ MODEL="roberta-large" ./experiments/prediction.sh
   `random_state=42`.
 - Optuna studies persist to SQLite, so searches are resumable and inspectable.
 - Experiment configuration is captured via Weights & Biases when enabled.
+- Trained model paths are controlled per-script by `MODEL_PATH`, so runs of
+  different configurations don't collide.
+```

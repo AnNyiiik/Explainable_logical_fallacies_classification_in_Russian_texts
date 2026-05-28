@@ -5,7 +5,7 @@ MODEL="${MODEL:-deepvk/USER-bge-m3}"
 MODEL_THING="$(echo "$MODEL" | tr '/' '_')"
 
 OPTUNA_ROOT="${OPTUNA_ROOT:-./data/optuna}"
-OPTUNA_DIR="${OPTUNA_DIR:-$OPTUNA_ROOT/$MODEL_THING/}"
+OPTUNA_DIR="${OPTUNA_DIR:-$OPTUNA_ROOT/$MODEL_THING}"
 mkdir -p "$OPTUNA_DIR"
 
 DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"

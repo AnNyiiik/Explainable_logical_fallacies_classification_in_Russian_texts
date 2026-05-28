@@ -3,11 +3,14 @@ set -euxo pipefail
 
 MODEL="${MODEL:-roberta-large}"
 MODEL_THING="$(echo "$MODEL" | tr '/' '_')"
-MODEL_PATH="${MODEL_PATH:-./data/saved_models/$MODEL_THING/}"
 
-TEST_TSV="${TEST_TSV:-./data/test_en.tsv}"
-INPUT_TXT="${INPUT_TXT:-./data/test_en.txt}"
-OUTPUT_CSV="${OUTPUT_CSV:-./data/test_en.csv}"
+SAVED_MODELS_DIR="${SAVED_MODELS_DIR:-./data/saved_models}"
+MODEL_PATH="${MODEL_PATH:-$SAVED_MODELS_DIR/$MODEL_THING/}"
+
+DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"
+TEST_TSV="${TEST_TSV:-$DATA_DIR/test_en.tsv}"
+INPUT_TXT="${INPUT_TXT:-$DATA_DIR/test_en.txt}"
+OUTPUT_CSV="${OUTPUT_CSV:-$DATA_DIR/test_en_pred.csv}"
 TEXT_COL="${TEXT_COL:-2}"
 
 echo "Extracting texts from $TEST_TSV..."

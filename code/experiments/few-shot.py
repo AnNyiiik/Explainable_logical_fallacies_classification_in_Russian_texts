@@ -29,7 +29,6 @@ def parse_args():
         help='Model name (e.g. claude-haiku-4-5 or gemini/gemini-3.1-flash-lite).'
     )
 
-    # --- Data paths ---
     parser.add_argument('-train_path', type=str, required=True, help='Path to the train TSV.')
     parser.add_argument('-test_path', type=str, required=True, help='Path to the test TSV.')
     parser.add_argument('-output_dir', type=str, required=True, help='Directory for results and checkpoints.')
@@ -253,6 +252,7 @@ def run_experiment(test_df, client, model, mode='zero_shot', examples_by_class=N
     processed_indices, checkpoint_records = load_checkpoint(checkpoint_path) if checkpoint_path else (set(), [])
 
     start_index = max(processed_indices) + 1 if processed_indices else 0
+    results = checkpoint_records.copy() 
 
     if start_index >= total:
         print(f"   All {total} examples have been already processed. Skip.")
