@@ -99,7 +99,9 @@ weighting, early stopping, and full-checkpoint saving.
 ├── data/
 │   ├── binary_detection_data/           #   JSON pairs & extras for the binary stage
 │   └── multiclass_TACEI_data/           #   TSV splits for the TACEI stage
-├── requirements.txt                     # Pinned Python dependencies
+├── pyproject.toml                       # Project dependencies (uv source of truth)
+├── uv.lock                              # Pinned versions for reproducible installs
+├── requirements.txt                     # Generated from uv.lock for pip users
 └── README.md                            # This file
 ```
 
@@ -110,9 +112,9 @@ weighting, early stopping, and full-checkpoint saving.
 
 ## Installation
 
-The project uses [**uv**](https://docs.astral.sh/uv/) as the primary
-environment manager (the run scripts call `uv run python ...`), but a plain
-`pip` workflow is also supported.
+The project uses [**uv**](https://docs.astral.sh/uv/) for dependency
+management — `pyproject.toml` is the single source of truth, and `uv.lock`
+pins exact versions for reproducibility.
 
 ### Requirements
 
@@ -133,31 +135,45 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/AnNyiiik/Explainable_logical_fallacies_classification_in_Russian_texts.git
 cd Explainable_logical_fallacies_classification_in_Russian_texts
 
-# Resolve & install all dependencies into a project-local .venv
-uv venv
-uv pip install -r requirements.txt
+# Create a Python 3.10 venv and install everything from pyproject.toml + uv.lock
+uv venv --python 3.10
+uv sync
 ```
 
-If `pyproject.toml` / `uv.lock` are present, `uv sync` does the same in one
-step.
+`uv sync` reads `pyproject.toml`, resolves to the exact versions stored in
+`uv.lock`, and installs them into `./.venv/`. All shell scripts then call
+`uv run python ...`, which uses this environment automatically.
 
-### Option B — pip + venv
+After installation, sanity-check that the stack imports cleanly:
 
 ```bash
-python -m venv .venv
+uv run python -c "import torch, transformers, sentence_transformers, datasets, numpy, pandas, sklearn; print('OK', torch.__version__)"
+```
+
+### Option B — pip + venv (no uv)
+
+```bash
+python3.10 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+`requirements.txt` is generated from `uv.lock` (`uv export --format
+requirements-txt --no-hashes > requirements.txt`) and provides the same
+pinned versions for users who prefer plain pip.
+
 ### PyTorch with CUDA
 
-`pip install torch` installs the CPU build by default. For GPU training,
-install the CUDA build that matches your driver — for example, CUDA 12.1:
+`uv sync` / `pip install torch` will install whatever PyTorch build matches
+your platform. If you need a specific CUDA version, install it explicitly
+afterwards — for example, CUDA 12.1:
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu121
+uv pip install --reinstall torch --index-url https://download.pytorch.org/whl/cu121
+# or, with pip:
+pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu121
 ```
 
 See the [PyTorch install matrix](https://pytorch.org/get-started/locally/) for
@@ -236,8 +252,9 @@ MODEL="deepvk/USER-bge-m3"   MODEL_PATH=./data/saved_models/deepvk_USER-bge-m3/ 
 ./code/experiments/launch_scripts/train_binary.sh                   # 2) train binary head
 
 # --- Multi-class TACEI stage ---
-./code/experiments/launch_scripts/train.sh                          # train with defaults (RU, xlm-roberta-large)
-MODEL="deepvk/USER-bge-m3" LR=1e-5 N_EPOCHS=10 ./code/experiments/launch_scripts/train.sh
+./code/experiments/launch_scripts/train.sh                          # train with defaults (RU, deepvk/USER-bge-m3)
+MODEL="FacebookAI/roberta-large" LR=1e-5 N_EPOCHS=10 \
+  ./code/experiments/launch_scripts/train.sh
 
 # Hyperparameter search
 N_TRIALS=50 ./code/experiments/launch_scripts/tune_USER-bge.sh
