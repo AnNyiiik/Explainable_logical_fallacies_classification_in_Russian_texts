@@ -252,7 +252,7 @@ def run_experiment(test_df, client, model, mode='zero_shot', examples_by_class=N
     processed_indices, checkpoint_records = load_checkpoint(checkpoint_path) if checkpoint_path else (set(), [])
 
     start_index = max(processed_indices) + 1 if processed_indices else 0
-    results = checkpoint_records.copy() 
+    results = checkpoint_records.copy()
 
     if start_index >= total:
         print(f"   All {total} examples have been already processed. Skip.")

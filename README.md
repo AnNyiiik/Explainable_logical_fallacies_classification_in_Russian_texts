@@ -200,6 +200,34 @@ Tab-separated (`.tsv`) splits with at least these columns:
 
 Expected splits: `train_{ru,en}.tsv`, `validate_{ru,en}.tsv`, `test_{ru,en}.tsv`.
 
+## Pretrained models
+
+Trained model checkpoints are distributed as a single archive (they are not
+committed to the repository). Download and extract them into the directory that
+the scripts expect (`./data/saved_models/` by default):
+
+```bash
+# Download (~ 22 GB)
+curl -L -o models.tar.zstd https://timafrolov.me/models.tar.zstd
+
+# Extract (requires zstd: `apt install zstd` / `brew install zstd`)
+mkdir -p ./data/saved_models
+tar --use-compress-program=unzstd -xf models.tar.zstd -C ./data/saved_models
+
+# Clean up the archive afterwards (optional)
+rm models.tar.zstd
+```
+
+After extraction, point the relevant script at the model with `MODEL_PATH`
+(or `SAVED_MODELS_DIR`) if your layout differs from the default — for example:
+
+```bash
+MODEL="deepvk/USER-bge-m3"   MODEL_PATH=./data/saved_models/deepvk_USER-bge-m3/   ./code/experiments/launch_scripts/prediction.sh
+```
+
+> If `tar` on your system does not support `--use-compress-program`, extract in
+> two steps: `unzstd models.tar.zstd && tar -xf models.tar`.
+
 ## Quick start
 
 ```bash
@@ -208,7 +236,7 @@ Expected splits: `train_{ru,en}.tsv`, `validate_{ru,en}.tsv`, `test_{ru,en}.tsv`
 ./code/experiments/launch_scripts/train_binary.sh                   # 2) train binary head
 
 # --- Multi-class TACEI stage ---
-./code/experiments/launch_scripts/train.sh                          # train with defaults (RU, deepvk/USER-bge-m3)
+./code/experiments/launch_scripts/train.sh                          # train with defaults (RU, xlm-roberta-large)
 MODEL="deepvk/USER-bge-m3" LR=1e-5 N_EPOCHS=10 ./code/experiments/launch_scripts/train.sh
 
 # Hyperparameter search
@@ -234,4 +262,3 @@ All scripts accept any parameter as an environment variable; see
 - Experiment configuration is captured via Weights & Biases when enabled.
 - Trained model paths are controlled per-script by `MODEL_PATH`, so runs of
   different configurations don't collide.
-```
