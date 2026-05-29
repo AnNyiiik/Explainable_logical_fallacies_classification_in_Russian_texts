@@ -8,7 +8,28 @@ EXTRA_NEUTRALS_FILE="${EXTRA_NEUTRALS_FILE:-$DATA_DIR/extra_neutrals.json}"
 
 SAVED_MODELS_DIR="${SAVED_MODELS_DIR:-./data/saved_models}"
 BINARY_DIR="${BINARY_DIR:-$SAVED_MODELS_DIR/binary}"
-ENCODER_NAME="${ENCODER_NAME:-$BINARY_DIR/user-bge-contrastive-finetuned/}"
+
+# Encoder selection:
+#   - If ENCODER_NAME is set explicitly (HF id or local path), use it as-is.
+#   - Otherwise auto-detect: prefer the contrastive fine-tuned encoder if it
+#     exists locally, fall back to the base HuggingFace model.
+FINETUNED_ENCODER="$BINARY_DIR/user-bge-contrastive-finetuned"
+BASE_ENCODER="deepvk/USER-bge-m3"
+
+if [ -z "${ENCODER_NAME:-}" ]; then
+    if [ -f "$FINETUNED_ENCODER/config.json" ]; then
+        ENCODER_NAME="$FINETUNED_ENCODER/"
+        echo "[train_binary] Using fine-tuned encoder: $ENCODER_NAME"
+    else
+        ENCODER_NAME="$BASE_ENCODER"
+        echo "[train_binary] Fine-tuned encoder not found at $FINETUNED_ENCODER"
+        echo "[train_binary] Falling back to base encoder: $ENCODER_NAME"
+        echo "[train_binary] (Run pretrain_encoder_contrastive.sh first to use a fine-tuned encoder.)"
+    fi
+else
+    echo "[train_binary] Using ENCODER_NAME override: $ENCODER_NAME"
+fi
+
 BEST_MODEL_PATH="${BEST_MODEL_PATH:-$BINARY_DIR/best_binary_classifier_full.pt}"
 
 MAX_SEQ_LENGTH="${MAX_SEQ_LENGTH:-512}"
