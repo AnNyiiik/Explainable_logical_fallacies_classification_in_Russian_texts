@@ -218,9 +218,16 @@ Expected splits: `train_{ru,en}.tsv`, `validate_{ru,en}.tsv`, `test_{ru,en}.tsv`
 
 ## Pretrained models
 
-Trained model checkpoints are distributed as a single archive (they are not
-committed to the repository). Download and extract them into the directory that
-the scripts expect (`./data/saved_models/` by default):
+Trained model checkpoints are not committed to the repository. Two separate
+artifact collections are provided depending on which stage you want to
+reproduce — you can download either one independently, or both.
+
+| Stage | Artifact | Source |
+|-------|----------|--------|
+| Multi-class (TACEI) | `models.tar.zstd` (~22 GB) | direct download |
+| Binary detection | encoder + classifier | Google Drive |
+
+### TACEI (multi-class stage) — `models.tar.zstd`
 
 ```bash
 # Download (~ 22 GB)
@@ -234,15 +241,37 @@ tar --use-compress-program=unzstd -xf models.tar.zstd -C ./data/saved_models
 rm models.tar.zstd
 ```
 
+> If `tar` on your system does not support `--use-compress-program`, extract in
+> two steps: `unzstd models.tar.zstd && tar -xf models.tar`.
+
 After extraction, point the relevant script at the model with `MODEL_PATH`
 (or `SAVED_MODELS_DIR`) if your layout differs from the default — for example:
 
 ```bash
-MODEL="deepvk/USER-bge-m3"   MODEL_PATH=./data/saved_models/deepvk_USER-bge-m3/   ./code/experiments/launch_scripts/prediction.sh
+MODEL="deepvk/USER-bge-m3" \
+  MODEL_PATH=./data/saved_models/deepvk_USER-bge-m3/ \
+  ./code/experiments/launch_scripts/prediction.sh
 ```
 
-> If `tar` on your system does not support `--use-compress-program`, extract in
-> two steps: `unzstd models.tar.zstd && tar -xf models.tar`.
+### Binary detection stage — contrastive encoder + classifier
+
+The contrastively fine-tuned encoder and the binary classifier checkpoint are
+available from Google Drive:
+
+**[Download from Google Drive →](https://drive.google.com/drive/folders/1CUm0UiazZxBT27QPDa7hSpX4OFdTlr1d?usp=share_link)**
+
+Place the downloaded artifacts under `./data/saved_models/binary/`:
+
+```
+./data/saved_models/binary/
+├── user-bge-contrastive-finetuned/      # encoder (HF format)
+└── best_binary_classifier_full.pt        # binary classifier checkpoint
+```
+
+These are the exact paths the launch scripts expect by default, so after
+extracting you can run inference / continue training without overriding any
+variables. `train_binary.sh` automatically detects the fine-tuned encoder if
+it is present, and falls back to the base HuggingFace model otherwise.
 
 ## Quick start
 
