@@ -3,7 +3,6 @@ import transformers
 from transformers import AutoModel, AutoTokenizer
 from torch.optim import AdamW
 from sklearn.metrics import f1_score, precision_score, recall_score
-import torch.nn.functional as F
 from collections import OrderedDict
 import torch.nn as nn
 import numpy as np
@@ -358,7 +357,8 @@ class MTLTrainer:
 
         return (np.array(train_exp_pred_data), np.array(new_train_labels),
                 np.array(valid_exp_pred_data), np.array(valid_cls_labels),
-                np.array(test_exp_pred_data), np.array(test_cls_labels))
+                np.array(test_exp_pred_data), np.array(test_cls_labels),
+                test_cls_f1, test_exp_f1)
 
     def train(self, saved_model_path=None):
         exp_labels = self.exp_labels_mapping

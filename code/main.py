@@ -19,13 +19,6 @@ import warnings
 warnings.filterwarnings("ignore")
 import time
 
-random.seed(12345)
-np.random.seed(67891)
-torch.manual_seed(54321)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-
-#default per-class weights
 DEFAULT_CLASS_WEIGHTS = [
     1.0,  # ad hominem
     1.5,  # ad populum
@@ -62,7 +55,7 @@ if __name__ == "__main__":
     begin_time = time.time()
 
     parser.add_argument('-input_path', type=str, default='data/train.tsv')
-    parser.add_argument('-random_state', type=int, default=13)
+    parser.add_argument('-seed', type=int, default=42, help='Global random seed')
     parser.add_argument('-model_config', type=str, default='vinai/bertweet-base')
     parser.add_argument('-cls_hidden_size', type=int, default=128)
     parser.add_argument('-exp_hidden_size', type=int, default=128)
@@ -121,7 +114,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Build the class-weights tensor from the CLI argument, falling back to defaults.
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     weights_list = args.class_weights if args.class_weights is not None else DEFAULT_CLASS_WEIGHTS
     if len(weights_list) != len(label_idx_map):
         parser.error(
@@ -279,14 +279,11 @@ if __name__ == "__main__":
             print("=" * 60)
 
         else:
-            # load data
             data = pd.read_csv(args.input_path, delimiter='\t')
 
-            # preprocess exp
             data[prepro_exp] = data[args.exp_col].apply(lambda x: x.strip().replace('[SEP]', args.sep_exp_token))
             data[prepro_exp] = data[prepro_exp].apply(lambda x: utils.preprocess_text(x, lower=True))
             data[prepro_exp] = data[prepro_exp].apply(lambda x: [y.strip() for y in x.split(args.sep_exp_token)])
-            # preprocess text
             data[prepro_text] = data[args.text_col].apply(lambda x: utils.preprocess_text(x, lower=True))
 
             data[prepro_label] = data[args.label_col].apply(lambda x: label_idx_map[x])
@@ -294,14 +291,12 @@ if __name__ == "__main__":
             data.drop_duplicates(subset=prepro_text, inplace=True)
             print("Data: ", data.shape, flush=True)
 
-            # initialize models
             text_data = np.array(data[prepro_text])
             exp_data = np.array(data[prepro_exp])
             cls_data = np.array(data[prepro_label])
 
             if args.mode == 'train':
                 os.makedirs(args.saved_model_path, exist_ok=True)
-                # train models on entire data
                 mtlTrainer = MTLTrainer(args, text_data, cls_data, exp_data)
                 print(">>>>> Phase 1...........", flush=True)
                 train_exp_data, train_labels = mtlTrainer.train(saved_model_path=args.saved_model_path + "phase1.pt")
@@ -312,15 +307,13 @@ if __name__ == "__main__":
             elif args.mode == "eval":
                 mtlTrainer = MTLTrainer(args, text_data, cls_data, exp_data)
                 clsTrainer = CLSTrainer(args, text_data, cls_data)
-                # cross-validate
-                # Используем ShuffleSplit без стратификации для второго разбиения
                 kfold = StratifiedShuffleSplit(n_splits=args.n_folds, test_size=args.test_size / 100,
-                                               random_state=args.random_state)
+                                               random_state=args.seed)
                 fold = 0
+                all_metrics = []
                 for train_indices, remain_indices in kfold.split(text_data, cls_data):
-                    # Для второго разбиения используем обычный train_test_split без стратификации
                     valid_indices, test_indices = train_test_split(remain_indices, test_size=0.5,
-                                                                   random_state=args.random_state)
+                                                                   random_state=args.seed)
                     print("---------------------FOLD {}-----------------------".format(fold))
                     print(">>>>> Phase 1...........", flush=True)
                     train_exp_pred_data, train_labels, valid_exp_pred_data, \
@@ -328,7 +321,20 @@ if __name__ == "__main__":
                                                                                         test_indices)
 
                     print(">>>>> Phase 2............", flush=True)
-                    clsTrainer.eval(train_exp_pred_data, train_labels, valid_exp_pred_data, valid_labels,
-                                    test_exp_pred_data, test_labels)
+                    phase2_cls_f1, _, _ = clsTrainer.eval(train_exp_pred_data, train_labels,
+                                                          valid_exp_pred_data, valid_labels,
+                                                          test_exp_pred_data, test_labels)
+
+                    fold_metrics = {
+                        'seed': args.seed,
+                        'fold': fold,
+                        'phase2_test_cls_f1': phase2_cls_f1,
+                    }
+                    all_metrics.append(fold_metrics)
                     print("--------------------------------------------------", flush=True)
                     fold += 1
+
+                os.makedirs('results', exist_ok=True)
+                df_metrics = pd.DataFrame(all_metrics)
+                df_metrics.to_csv(f'results/fold_metrics_seed_{args.seed}.csv', index=False)
+                print(f"Saved metrics for seed {args.seed} to results/fold_metrics_seed_{args.seed}.csv")
