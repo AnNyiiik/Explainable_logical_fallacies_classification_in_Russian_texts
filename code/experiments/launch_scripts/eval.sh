@@ -22,12 +22,19 @@ CLASS_WEIGHTS="${CLASS_WEIGHTS:-1.0 1.6 1.0 1.4 1.0 1.1 1.0 1.0 1.6 1.0 1.0 1.6}
 
 export WANDB_MODE=disabled
 
+echo "=== DEBUG ==="
+echo "MODEL: $MODEL"
+echo "INPUT_FILE: $INPUT_FILE"
+echo "CLASS_WEIGHTS: $CLASS_WEIGHTS"
+echo "Current directory: $(pwd)"
+ls -la "$INPUT_FILE" || { echo "❌ Файл $INPUT_FILE не найден!"; exit 1; }
+echo "============="
+
 mkdir -p results
 
 for SEED in $SEEDS; do
     echo "========================================="
     echo "Running cross-validation with seed=$SEED"
-    echo "Model: $MODEL"
     echo "========================================="
     python ./code/main.py -mode eval \
         -seed "$SEED" \
