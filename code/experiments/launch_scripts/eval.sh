@@ -38,7 +38,7 @@ for SEED in $SEEDS; do
     echo "========================================="
     echo "Running cross-validation with seed=$SEED"
     echo "========================================="
-    python ./code/main.py -mode eval \
+    uv run python ./code/main.py -mode eval \
         -seed "$SEED" \
         -input_path "$INPUT_FILE" \
         -n_folds "$N_FOLDS" \
