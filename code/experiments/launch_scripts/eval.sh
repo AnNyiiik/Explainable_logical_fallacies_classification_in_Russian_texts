@@ -8,7 +8,7 @@ N_FOLDS="${N_FOLDS:-5}"
 SEEDS="${SEEDS:-12345 67891 54321 999 777}"
 
 MAX_LEN="${MAX_LEN:-512}"
-TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-8}"
+TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-4}"
 TEST_BATCH_SIZE="${TEST_BATCH_SIZE:-32}"
 CLS_HIDDEN_SIZE="${CLS_HIDDEN_SIZE:-128}"
 EXP_HIDDEN_SIZE="${EXP_HIDDEN_SIZE:-128}"
@@ -17,6 +17,8 @@ PATIENCE="${PATIENCE:-5}"
 LR="${LR:-1.23e-6}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-0.0012}"
 EXP_WEIGHT="${EXP_WEIGHT:-0.25}"
+ACCUMULATION_STEPS="${ACCUMULATION_STEPS:-2}"
+USE_AMP="${USE_AMP:-true}"
 
 CLASS_WEIGHTS="${CLASS_WEIGHTS:-1.0 1.6 1.0 1.4 1.0 1.1 1.0 1.0 1.6 1.0 1.0 1.6}"
 
@@ -51,7 +53,9 @@ for SEED in $SEEDS; do
         -max_len "$MAX_LEN" \
         -cls_hidden_size "$CLS_HIDDEN_SIZE" \
         -exp_hidden_size "$EXP_HIDDEN_SIZE" \
-        -class_weights $CLASS_WEIGHTS
+        -class_weights $CLASS_WEIGHTS \
+        -accumulation_steps "$ACCUMULATION_STEPS" \
+        $( [ "$USE_AMP" = "true" ] && echo "-use_amp" )
 done
 
 echo "All experiments completed. Results saved in ./results/"

@@ -78,6 +78,8 @@ if __name__ == "__main__":
     parser.add_argument('-saved_model_path', type=str, default="data/saved_models/")
     parser.add_argument('-wandb_api_key', type=str, default=None, help='Weights & Biases API key')
     parser.add_argument('-weight_decay', type=float, default=0.01, help='weight decay for AdamW')
+    parser.add_argument('-accumulation_steps', type=int, default=1, help='Gradient accumulation steps')
+    parser.add_argument('-use_amp', action='store_true', help='Use automatic mixed precision')
 
     parser.add_argument('-class_weights', type=float, nargs='+', default=None,
                         help='Per-class weights as a space-separated list, ordered as in label_idx_map. '
@@ -333,6 +335,7 @@ if __name__ == "__main__":
                     all_metrics.append(fold_metrics)
                     print("--------------------------------------------------", flush=True)
                     fold += 1
+                    torch.cuda.empty_cache()
 
                 os.makedirs('results', exist_ok=True)
                 df_metrics = pd.DataFrame(all_metrics)
