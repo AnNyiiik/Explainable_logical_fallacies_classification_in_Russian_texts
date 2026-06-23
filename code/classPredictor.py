@@ -242,7 +242,7 @@ class CLSTrainer:
                 best_epoch = epoch
                 best_model_state_dict = OrderedDict({k: v.cpu() for k, v in self.model.state_dict().items()})
                 print(f"  ✅ New best model! valid_loss: {best_loss:.4f}")
-                if hasattr(self.args, 'saved_model_path') and self.args.saved_model_path:
+                if hasattr(self.args, 'saved_model_path') and self.args.saved_model_path and self.args.mode != 'eval':
                     checkpoint_path = os.path.join(self.args.saved_model_path, f"phase2_best_checkpoint.pt")
                     save_full_checkpoint_phase2(self.model, self.optimizer, self.scheduler, epoch, best_loss, self.args, checkpoint_path)
 

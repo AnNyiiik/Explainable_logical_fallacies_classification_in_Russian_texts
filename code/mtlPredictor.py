@@ -16,6 +16,7 @@ from utils import per_class_classification_analysis, per_class_rationale_analysi
 from contextlib import nullcontext
 
 def save_full_checkpoint(model, optimizer, scheduler, epoch, best_loss, args, filepath):
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -242,7 +243,7 @@ class MTLTrainer:
                 best_loss = valid_loss
                 best_epoch = {'epoch': epoch, 'valid_loss': valid_loss}
                 best_model_state_dict = OrderedDict({k: v.cpu() for k, v in self.model.state_dict().items()})
-                if hasattr(self.args, 'saved_model_path') and self.args.saved_model_path:
+                if hasattr(self.args, 'saved_model_path') and self.args.saved_model_path and self.args.mode != 'eval':
                     checkpoint_path = os.path.join(self.args.saved_model_path, f"phase1_best_checkpoint.pt")
                     save_full_checkpoint(self.model, self.optimizer, self.scheduler, epoch, best_loss, self.args, checkpoint_path)
 

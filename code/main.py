@@ -20,18 +20,18 @@ warnings.filterwarnings("ignore")
 import time
 
 DEFAULT_CLASS_WEIGHTS = [
-    1.0,  # ad hominem
-    1.5,  # ad populum
-    1.0,  # appeal to emotion
-    2.0,  # circular reasoning
-    1.0,  # equivocation
-    1.2,  # fallacy of credibility
-    0.8,  # fallacy of extension
-    0.9,  # fallacy of relevance
-    1.5,  # false causality
-    1.0,  # false dilemma
-    1.5,  # faulty generalization
-    2.0,  # intentional
+    1.0,
+    1.5,
+    1.0,
+    2.0,
+    1.0,
+    1.2,
+    0.8,
+    0.9,
+    1.5,
+    1.0,
+    1.5,
+    2.0,
 ]
 
 
@@ -88,8 +88,7 @@ if __name__ == "__main__":
     parser.add_argument('-full_train', type=str, default=True,
                         help='True: full data, False: only use the correct prediction from 1st phase for training in 2nd phase')
 
-    parser.add_argument('-mode', type=str, default='eval', help='train: train model, eval:evaluate with n-folds, \
-                                prediction: make prediction on new data')
+    parser.add_argument('-mode', type=str, default='eval', help='train: train model, eval:evaluate with n-folds, prediction: make prediction on new data')
 
     parser.add_argument('-train_file', type=str, default=None, help='Path to pre-split train file')
     parser.add_argument('-valid_file', type=str, default=None, help='Path to pre-split validation file')
