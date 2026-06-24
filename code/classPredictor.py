@@ -230,12 +230,13 @@ class CLSTrainer:
 
             print("Epoch: %d, train_loss: %.3f, valid_loss: %.3f, time: %.3f" % (epoch, train_loss, valid_loss,
                                                                                  time.time() - begin_time), flush=True)
-            wandb.log({
-                "phase2_epoch": epoch,
-                "phase2_train_loss": train_loss,
-                "phase2_valid_loss": valid_loss,
-                "phase2_learning_rate": self.scheduler.get_last_lr()[0]
-            })
+            if self.args.mode != 'eval':
+                wandb.log({
+                    "phase2_epoch": epoch,
+                    "phase2_train_loss": train_loss,
+                    "phase2_valid_loss": valid_loss,
+                    "phase2_learning_rate": self.scheduler.get_last_lr()[0]
+                })
 
             if valid_loss < best_loss:
                 best_loss = valid_loss
@@ -271,7 +272,7 @@ class CLSTrainer:
 
             print("\n" + "🔍 " + "=" * 67)
             per_class_classification_analysis(y_true=test_labels, y_pred=y_pred, class_names=class_names,
-                                              phase_name="Phase2_Test", logger=wandb.log)
+                                              phase_name="Phase2_Test", logger=wandb.log if self.args.mode != 'eval' else None)
             return test_f1, y_pred, y_probs
 
         self.model.cpu()
