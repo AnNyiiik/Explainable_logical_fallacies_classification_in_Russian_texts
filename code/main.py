@@ -136,20 +136,37 @@ if __name__ == "__main__":
 
     idx_label_map = {idx: label for label, idx in label_idx_map.items()}
 
-    wandb.init(
-        project="TACEI_experiment",
-        config={
-            "model_config": args.model_config,
-            "learning_rate": args.lr,
-            "exp_weight": args.exp_weight,
-            "train_batch_size": args.train_batch_size,
-            "n_epochs": args.n_epochs,
-            "patience": args.patience,
-            "cls_hidden_size": args.cls_hidden_size,
-            "exp_hidden_size": args.exp_hidden_size,
-            "class_weights": args.class_weights.tolist(),
-        }
-    )
+    if args.mode == 'eval':
+        wandb.init(
+            project="TACEI_experiment",
+            mode="disabled",
+            config={
+                "model_config": args.model_config,
+                "learning_rate": args.lr,
+                "exp_weight": args.exp_weight,
+                "train_batch_size": args.train_batch_size,
+                "n_epochs": args.n_epochs,
+                "patience": args.patience,
+                "cls_hidden_size": args.cls_hidden_size,
+                "exp_hidden_size": args.exp_hidden_size,
+                "class_weights": args.class_weights.tolist(),
+            }
+        )
+    else:
+        wandb.init(
+            project="TACEI_experiment",
+            config={
+                "model_config": args.model_config,
+                "learning_rate": args.lr,
+                "exp_weight": args.exp_weight,
+                "train_batch_size": args.train_batch_size,
+                "n_epochs": args.n_epochs,
+                "patience": args.patience,
+                "cls_hidden_size": args.cls_hidden_size,
+                "exp_hidden_size": args.exp_hidden_size,
+                "class_weights": args.class_weights.tolist(),
+            }
+        )
 
     if args.mode == 'prediction':
         mtlTrainer = MTLTrainer(args)
