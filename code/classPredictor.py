@@ -11,7 +11,6 @@ import utils
 import time
 import sys
 import os
-import wandb
 from utils import per_class_classification_analysis
 from contextlib import nullcontext
 
@@ -230,13 +229,6 @@ class CLSTrainer:
 
             print("Epoch: %d, train_loss: %.3f, valid_loss: %.3f, time: %.3f" % (epoch, train_loss, valid_loss,
                                                                                  time.time() - begin_time), flush=True)
-            if self.args.mode != 'eval':
-                wandb.log({
-                    "phase2_epoch": epoch,
-                    "phase2_train_loss": train_loss,
-                    "phase2_valid_loss": valid_loss,
-                    "phase2_learning_rate": self.scheduler.get_last_lr()[0]
-                })
 
             if valid_loss < best_loss:
                 best_loss = valid_loss
@@ -272,7 +264,7 @@ class CLSTrainer:
 
             print("\n" + "🔍 " + "=" * 67)
             per_class_classification_analysis(y_true=test_labels, y_pred=y_pred, class_names=class_names,
-                                              phase_name="Phase2_Test", logger=wandb.log if self.args.mode != 'eval' else None)
+                                              phase_name="Phase2_Test", logger=None)
             return test_f1, y_pred, y_probs
 
         self.model.cpu()
@@ -319,16 +311,10 @@ class CLSTrainer:
             begin_time = time.time()
             train_loss = self.fit(train_data, train_labels, self.args.train_batch_size, criterion, accumulation_steps)
             print("Epoch: %d, train_loss: %.3f, time: %.3f" % (epoch, train_loss, time.time() - begin_time), flush=True)
-            wandb.log({
-                "phase2_train_epoch": epoch,
-                "phase2_train_loss": train_loss,
-                "phase2_learning_rate": self.scheduler.get_last_lr()[0]
-            })
 
         _, y_pred, _ = self.predict(self.data, self.labels, criterion, batch_size=self.args.test_batch_size)
         train_f1 = f1_score(self.labels, y_pred, average='macro')
         print("++ Train CLS F1: {}".format(train_f1), flush=True)
-        wandb.log({"phase2_final_train_f1": train_f1})
 
         self.model.cpu()
         self.optimizer = None

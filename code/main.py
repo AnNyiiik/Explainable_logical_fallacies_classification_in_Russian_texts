@@ -6,7 +6,6 @@ import random
 import numpy as np
 import pandas as pd
 import utils
-import wandb
 import transformers.file_utils as hf_file_utils
 from mtlPredictor import MTLTrainer
 from classPredictor import CLSTrainer
@@ -15,7 +14,6 @@ from transformers import logging
 
 logging.set_verbosity_error()
 import warnings
-
 warnings.filterwarnings("ignore")
 import time
 
@@ -34,20 +32,15 @@ DEFAULT_CLASS_WEIGHTS = [
     2.0,
 ]
 
-
 def patch_hf_relative_redirects():
     if not hasattr(hf_file_utils, "http_get"):
         return
-
     original_http_get = hf_file_utils.http_get
-
     def patched_http_get(url, temp_file, proxies=None, resume_size=0, headers=None):
         if isinstance(url, str) and url.startswith('/'):
             url = 'https://huggingface.co' + url
         return original_http_get(url, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
-
     hf_file_utils.http_get = patched_http_get
-
 
 if __name__ == "__main__":
     patch_hf_relative_redirects()
@@ -76,7 +69,6 @@ if __name__ == "__main__":
     parser.add_argument('-input_new_data_path', type=str, default="data/input.csv")
     parser.add_argument('-output_new_data_path', type=str, default="data/output.csv")
     parser.add_argument('-saved_model_path', type=str, default="data/saved_models/")
-    parser.add_argument('-wandb_api_key', type=str, default=None, help='Weights & Biases API key')
     parser.add_argument('-weight_decay', type=float, default=0.01, help='weight decay for AdamW')
     parser.add_argument('-accumulation_steps', type=int, default=1, help='Gradient accumulation steps')
     parser.add_argument('-use_amp', action='store_true', help='Use automatic mixed precision')
@@ -84,12 +76,9 @@ if __name__ == "__main__":
     parser.add_argument('-class_weights', type=float, nargs='+', default=None,
                         help='Per-class weights as a space-separated list, ordered as in label_idx_map. '
                              'If omitted, DEFAULT_CLASS_WEIGHTS is used.')
-
     parser.add_argument('-full_train', type=str, default=True,
                         help='True: full data, False: only use the correct prediction from 1st phase for training in 2nd phase')
-
     parser.add_argument('-mode', type=str, default='eval', help='train: train model, eval:evaluate with n-folds, prediction: make prediction on new data')
-
     parser.add_argument('-train_file', type=str, default=None, help='Path to pre-split train file')
     parser.add_argument('-valid_file', type=str, default=None, help='Path to pre-split validation file')
     parser.add_argument('-test_file', type=str, default=None, help='Path to pre-split test file')
@@ -133,40 +122,7 @@ if __name__ == "__main__":
     print("Class weights:", args.class_weights.tolist(), flush=True)
 
     args.label_idx_map = label_idx_map
-
     idx_label_map = {idx: label for label, idx in label_idx_map.items()}
-
-    if args.mode == 'eval':
-        wandb.init(
-            project="TACEI_experiment",
-            mode="disabled",
-            config={
-                "model_config": args.model_config,
-                "learning_rate": args.lr,
-                "exp_weight": args.exp_weight,
-                "train_batch_size": args.train_batch_size,
-                "n_epochs": args.n_epochs,
-                "patience": args.patience,
-                "cls_hidden_size": args.cls_hidden_size,
-                "exp_hidden_size": args.exp_hidden_size,
-                "class_weights": args.class_weights.tolist(),
-            }
-        )
-    else:
-        wandb.init(
-            project="TACEI_experiment",
-            config={
-                "model_config": args.model_config,
-                "learning_rate": args.lr,
-                "exp_weight": args.exp_weight,
-                "train_batch_size": args.train_batch_size,
-                "n_epochs": args.n_epochs,
-                "patience": args.patience,
-                "cls_hidden_size": args.cls_hidden_size,
-                "exp_hidden_size": args.exp_hidden_size,
-                "class_weights": args.class_weights.tolist(),
-            }
-        )
 
     if args.mode == 'prediction':
         mtlTrainer = MTLTrainer(args)

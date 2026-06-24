@@ -11,7 +11,6 @@ import utils
 import time
 import sys
 import os
-import wandb
 from utils import per_class_classification_analysis, per_class_rationale_analysis
 from contextlib import nullcontext
 
@@ -230,16 +229,6 @@ class MTLTrainer:
                                                                                                      valid_loss, cls_f1,
                                                                                                      time.time() - begin_time),flush=True)
 
-            if self.args.mode != 'eval':
-                wandb.log({
-                    "epoch": epoch,
-                    "train_loss": train_loss,
-                    "valid_loss": valid_loss,
-                    "valid_cls_f1_macro": cls_f1,
-                    "valid_exp_token_f1": exp_f1,
-                    "learning_rate": self.scheduler.get_last_lr()[0]
-                })
-
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 best_epoch = {'epoch': epoch, 'valid_loss': valid_loss}
@@ -323,14 +312,6 @@ class MTLTrainer:
         print("++ Exp F1: %.4f, exp_p: %.4f, exp_r: %.4f" % (test_exp_f1, test_exp_p, test_exp_r))
         print("++++++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
 
-        if self.args.mode != 'eval':
-            wandb.log({
-                "test_cls_f1_macro": test_cls_f1,
-                "test_exp_token_f1": test_exp_f1,
-                "test_exp_token_precision": test_exp_p,
-                "test_exp_token_recall": test_exp_r
-            })
-
         label_idx_to_name = {v: k for k, v in self.args.label_idx_map.items()} if hasattr(self.args, 'label_idx_map') else {}
         if label_idx_to_name:
             class_names = [label_idx_to_name[i] for i in range(self.num_classes) if i in label_idx_to_name]
@@ -345,12 +326,12 @@ class MTLTrainer:
         print("\n" + "🔍 " + "=" * 67)
         per_class_classification_analysis(
             y_true=test_cls_labels, y_pred=test_cls_pred_labels, class_names=class_names,
-            phase_name="Phase1_Test", logger=wandb.log if self.args.mode != 'eval' else None)
+            phase_name="Phase1_Test", logger=None)
         print("\n" + "🔍 " + "=" * 67)
         per_class_rationale_analysis(
             true_rationales=test_exp_true_labels, pred_rationales=test_exp_pred_labels_pooled,
             class_labels=test_cls_labels_list, class_names=class_names,
-            phase_name="Phase1_Rationale", logger=wandb.log if self.args.mode != 'eval' else None, label_idx_to_name=label_idx_to_name)
+            phase_name="Phase1_Rationale", logger=None, label_idx_to_name=label_idx_to_name)
 
         self.model.cpu()
         self.optimizer = None
@@ -391,11 +372,6 @@ class MTLTrainer:
                                   cls_criterion, exp_criterion, exp_weight,
                                   self.args.train_batch_size, accumulation_steps)
             print("Epoch: %d, train_loss: %.3f, time: %.3f" % (epoch, train_loss, time.time() - begin_time), flush=True)
-            wandb.log({
-                "epoch": epoch,
-                "train_loss": train_loss,
-                "learning_rate": self.scheduler.get_last_lr()[0]
-            })
         cls_pred_labels, exp_pred_labels, _, _, _ = self.predict(self.input_ids, self.attention_masks,
                                                                  cls_labels, exp_labels, cls_criterion, exp_criterion,
                                                                  exp_weight, self.args.test_batch_size)
@@ -404,10 +380,6 @@ class MTLTrainer:
         cls_f1 = f1_score(cls_labels, cls_pred_labels, average='macro')
         exp_f1 = np.mean([f1_score(y_true, y_pred) for y_true, y_pred in zip(exp_true_labels, exp_pred_labels)])
         print("++ Training CLS F1: {}, EXP F1: {}".format(cls_f1, exp_f1), flush=True)
-        wandb.log({
-            "final_train_cls_f1_macro": cls_f1,
-            "final_train_exp_token_f1": exp_f1
-        })
         exp_pred_data = []
         new_labels = []
         for data, exp, cls_pred, cls_true in zip(self.data, exp_pred_labels, cls_pred_labels, cls_labels):
