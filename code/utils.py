@@ -2,7 +2,7 @@ import numpy as np
 import re
 import torch
 from tweet_preprocessing import normalizeTweet
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 def convert_sents_to_ids_tensor(tokenizer, sents, pad_token='<pad>'):
     tokens_list = [tokenizer.tokenize(sent) for sent in sents]
