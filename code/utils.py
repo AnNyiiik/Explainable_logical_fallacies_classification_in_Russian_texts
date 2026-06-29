@@ -2,7 +2,7 @@ import numpy as np
 import re
 import torch
 from tweet_preprocessing import normalizeTweet
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import classification_report, confusion_matrix, f1_score, precision_score, recall_score
 
 def convert_sents_to_ids_tensor(tokenizer, sents, pad_token='<pad>'):
     tokens_list = [tokenizer.tokenize(sent) for sent in sents]
@@ -26,7 +26,7 @@ def create_text_without_rationale(original_text_tokens, importance_mask):
     without_rationale_tokens = [tok if keep == 0 else '*' for tok, keep in zip(original_text_tokens, importance_mask)]
     return ' '.join(without_rationale_tokens)
 
-def per_class_classification_analysis(y_true, y_pred, class_names=None, phase_name="", logger=None):
+def per_class_classification_analysis(y_true, y_pred, class_names=None, phase_name="", logger=None, save_csv_path=None):
     if class_names is None:
         class_names = [str(i) for i in sorted(set(y_true) | set(y_pred))]
     print("\n" + "=" * 70)
@@ -35,13 +35,44 @@ def per_class_classification_analysis(y_true, y_pred, class_names=None, phase_na
     report = classification_report(y_true, y_pred, target_names=class_names, output_dict=True, zero_division=0)
     print(f"\n{'Class':<30} {'Precision':<12} {'Recall':<12} {'F1-Score':<12} {'Support':<10}")
     print("-" * 80)
+    rows_for_csv = []
     for class_name in class_names:
         if class_name in report and isinstance(report[class_name], dict):
             m = report[class_name]
             print(f"{str(class_name):<30} {m['precision']:<12.4f} {m['recall']:<12.4f} {m['f1-score']:<12.4f} {m['support']:<10.0f}")
+            rows_for_csv.append({
+                'class': class_name,
+                'precision': m['precision'],
+                'recall': m['recall'],
+                'f1-score': m['f1-score'],
+                'support': m['support']
+            })
     print("-" * 80)
     print(f"{'macro avg':<30} {report['macro avg']['precision']:<12.4f} {report['macro avg']['recall']:<12.4f} {report['macro avg']['f1-score']:<12.4f}")
     print(f"{'weighted avg':<30} {report['weighted avg']['precision']:<12.4f} {report['weighted avg']['recall']:<12.4f} {report['weighted avg']['f1-score']:<12.4f}")
+
+    rows_for_csv.append({
+        'class': 'macro avg',
+        'precision': report['macro avg']['precision'],
+        'recall': report['macro avg']['recall'],
+        'f1-score': report['macro avg']['f1-score'],
+        'support': None
+    })
+    rows_for_csv.append({
+        'class': 'weighted avg',
+        'precision': report['weighted avg']['precision'],
+        'recall': report['weighted avg']['recall'],
+        'f1-score': report['weighted avg']['f1-score'],
+        'support': None
+    })
+
+    if save_csv_path:
+        os.makedirs(os.path.dirname(save_csv_path), exist_ok=True)
+        df = pd.DataFrame(rows_for_csv)
+        df.to_csv(save_csv_path, index=False)
+        print(f"  Per-class classification report saved to {save_csv_path}")
+
+    # Confusion matrix и вывод ошибок
     cm = confusion_matrix(y_true, y_pred)
     errors = []
     for i, true_name in enumerate(class_names):
@@ -56,6 +87,7 @@ def per_class_classification_analysis(y_true, y_pred, class_names=None, phase_na
         print("-" * 70)
         for true_class, pred_class, count in errors[:5]:
             print(f"{true_class:<30} {pred_class:<30} {count:<5}")
+
     if logger is not None:
         for class_name in class_names:
             if class_name in report and isinstance(report[class_name], dict):
@@ -69,8 +101,9 @@ def per_class_classification_analysis(y_true, y_pred, class_names=None, phase_na
                 f"{phase_name}_accuracy": report.get('accuracy', 0)})
     return report
 
+
 def per_class_rationale_analysis(true_rationales, pred_rationales, class_names=None, class_labels=None, phase_name="",
-                                 logger=None, label_idx_to_name=None):
+                                 logger=None, label_idx_to_name=None, save_csv_path=None):
     if class_labels is None:
         all_true = []
         all_pred = []
@@ -91,7 +124,9 @@ def per_class_rationale_analysis(true_rationales, pred_rationales, class_names=N
         print(f"  Token-Recall: {rec:.4f}")
         if logger is not None:
             logger({f"{phase_name}_token_f1": f1, f"{phase_name}_token_precision": prec, f"{phase_name}_token_recall": rec})
+        # Сохранение для overall (если нужно) – опускаем, т.к. хотим per-class
         return {'f1': f1, 'precision': prec, 'recall': rec}
+
     if class_names is None:
         class_names = sorted(set(class_labels))
     if label_idx_to_name is None:
@@ -102,6 +137,7 @@ def per_class_rationale_analysis(true_rationales, pred_rationales, class_names=N
     print(f"\n{'Class':<30} {'Token-F1':<12} {'Token-Prec':<12} {'Token-Rec':<12} {'Support':<10}")
     print("-" * 80)
     results = {}
+    rows_for_csv = []
     for class_name in class_names:
         class_true = []
         class_pred = []
@@ -119,6 +155,13 @@ def per_class_rationale_analysis(true_rationales, pred_rationales, class_names=N
             rec = recall_score(class_true, class_pred, zero_division=0)
             results[class_name] = {'f1': f1, 'precision': prec, 'recall': rec, 'support': class_count}
             print(f"{str(class_name):<30} {f1:<12.4f} {prec:<12.4f} {rec:<12.4f} {class_count:<10}")
+            rows_for_csv.append({
+                'class': class_name,
+                'token_f1': f1,
+                'token_precision': prec,
+                'token_recall': rec,
+                'support': class_count
+            })
     print("-" * 80)
     if results:
         avg_f1 = np.mean([v['f1'] for v in results.values()])
@@ -128,6 +171,20 @@ def per_class_rationale_analysis(true_rationales, pred_rationales, class_names=N
         avg_f1 = avg_prec = avg_rec = 0.0
         print("No valid rationale data for any class")
     print(f"{'macro avg':<30} {avg_f1:<12.4f} {avg_prec:<12.4f} {avg_rec:<12.4f}")
+    rows_for_csv.append({
+        'class': 'macro avg',
+        'token_f1': avg_f1,
+        'token_precision': avg_prec,
+        'token_recall': avg_rec,
+        'support': None
+    })
+
+    if save_csv_path and rows_for_csv:
+        os.makedirs(os.path.dirname(save_csv_path), exist_ok=True)
+        df = pd.DataFrame(rows_for_csv)
+        df.to_csv(save_csv_path, index=False)
+        print(f"  Per-class rationale report saved to {save_csv_path}")
+
     if logger is not None:
         for class_name, metrics in results.items():
             safe_class_name = str(class_name).replace(' ', '_').replace('-', '_')

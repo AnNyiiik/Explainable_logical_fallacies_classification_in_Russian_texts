@@ -291,9 +291,9 @@ if __name__ == "__main__":
                     print("---------------------FOLD {}-----------------------".format(fold))
                     print(">>>>> Phase 1...........", flush=True)
                     train_exp_pred_data, train_labels, valid_exp_pred_data, \
-                        valid_labels, test_exp_pred_data, test_labels = mtlTrainer.eval(train_indices, valid_indices,
-                                                                                        test_indices)
-
+                        valid_labels, test_exp_pred_data, test_labels, phase1_cls_f1, phase1_exp_f1 = mtlTrainer.eval(
+                        train_indices, valid_indices, test_indices, fold=fold
+                    )
                     print(">>>>> Phase 2............", flush=True)
                     phase2_cls_f1, _, _ = clsTrainer.eval(train_exp_pred_data, train_labels,
                                                           valid_exp_pred_data, valid_labels,
@@ -302,6 +302,8 @@ if __name__ == "__main__":
                     fold_metrics = {
                         'seed': args.seed,
                         'fold': fold,
+                        'phase1_test_cls_f1': phase1_cls_f1,
+                        'phase1_test_exp_f1': phase1_exp_f1,
                         'phase2_test_cls_f1': phase2_cls_f1,
                     }
                     all_metrics.append(fold_metrics)
