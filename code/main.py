@@ -288,6 +288,12 @@ if __name__ == "__main__":
                 for train_indices, remain_indices in kfold.split(text_data, cls_data):
                     valid_indices, test_indices = train_test_split(remain_indices, test_size=0.5,
                                                                    random_state=args.seed)
+                    seed_dir = f"results/seed_{args.seed}"
+                    os.makedirs(seed_dir, exist_ok=True)
+                    np.save(os.path.join(seed_dir, f"fold_{fold}_train_indices.npy"), train_indices)
+                    np.save(os.path.join(seed_dir, f"fold_{fold}_test_indices.npy"), test_indices)
+                    np.save(os.path.join(seed_dir, f"fold_{fold}_valid_indices.npy"), valid_indices)
+
                     print("---------------------FOLD {}-----------------------".format(fold))
                     print(">>>>> Phase 1...........", flush=True)
                     train_exp_pred_data, train_labels, valid_exp_pred_data, \
