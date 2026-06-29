@@ -5,7 +5,7 @@ MODEL="${MODEL:-deepvk/USER-bge-m3}"
 DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"
 INPUT_FILE="${INPUT_FILE:-$DATA_DIR/train_ru.tsv}"
 N_FOLDS="${N_FOLDS:-5}"
-SEEDS="${SEEDS:-12345 67891 54321 999 777}"
+SEED="${SEED:-12345}"
 
 N_EPOCHS="${N_EPOCHS:-5}"
 PATIENCE="${PATIENCE:-3}"
@@ -23,25 +23,23 @@ export WANDB_MODE=disabled
 
 mkdir -p results
 
-for SEED in $SEEDS; do
-    echo "========================================="
-    echo "Running cross-validation with seed=$SEED"
-    echo "========================================="
-    uv run python ./code/main.py -mode eval \
-        -seed "$SEED" \
-        -input_path "$INPUT_FILE" \
-        -n_folds "$N_FOLDS" \
-        -model_config "$MODEL" \
-        -n_epochs "$N_EPOCHS" \
-        -patience "$PATIENCE" \
-        -lr "$LR" \
-        -exp_weight "$EXP_WEIGHT" \
-        -train_batch_size "$TRAIN_BATCH_SIZE" \
-        -test_batch_size "$TEST_BATCH_SIZE" \
-        -max_len "$MAX_LEN" \
-        -cls_hidden_size "$CLS_HIDDEN_SIZE" \
-        -exp_hidden_size "$EXP_HIDDEN_SIZE" \
-        -accumulation_steps "$ACCUMULATION_STEPS"
-done
+echo "========================================="
+echo "Running cross-validation with seed=$SEED"
+echo "========================================="
+uv run python ./code/main.py -mode eval \
+    -seed "$SEED" \
+    -input_path "$INPUT_FILE" \
+    -n_folds "$N_FOLDS" \
+    -model_config "$MODEL" \
+    -n_epochs "$N_EPOCHS" \
+    -patience "$PATIENCE" \
+    -lr "$LR" \
+    -exp_weight "$EXP_WEIGHT" \
+    -train_batch_size "$TRAIN_BATCH_SIZE" \
+    -test_batch_size "$TEST_BATCH_SIZE" \
+    -max_len "$MAX_LEN" \
+    -cls_hidden_size "$CLS_HIDDEN_SIZE" \
+    -exp_hidden_size "$EXP_HIDDEN_SIZE" \
+    -accumulation_steps "$ACCUMULATION_STEPS"
 
-echo "All experiments completed. Results saved in ./results/"
+echo "Experiment completed. Results saved in ./results/"
