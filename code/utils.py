@@ -2,6 +2,7 @@ import numpy as np
 import os
 import re
 import torch
+import pandas as pd
 from tweet_preprocessing import normalizeTweet
 from sklearn.metrics import classification_report, confusion_matrix, f1_score, precision_score, recall_score
 
@@ -102,7 +103,6 @@ def per_class_classification_analysis(y_true, y_pred, class_names=None, phase_na
                 f"{phase_name}_accuracy": report.get('accuracy', 0)})
     return report
 
-
 def per_class_rationale_analysis(true_rationales, pred_rationales, class_names=None, class_labels=None, phase_name="",
                                  logger=None, label_idx_to_name=None, save_csv_path=None):
     if class_labels is None:
@@ -125,7 +125,6 @@ def per_class_rationale_analysis(true_rationales, pred_rationales, class_names=N
         print(f"  Token-Recall: {rec:.4f}")
         if logger is not None:
             logger({f"{phase_name}_token_f1": f1, f"{phase_name}_token_precision": prec, f"{phase_name}_token_recall": rec})
-        # Сохранение для overall (если нужно) – опускаем, т.к. хотим per-class
         return {'f1': f1, 'precision': prec, 'recall': rec}
 
     if class_names is None:
