@@ -283,13 +283,37 @@ if __name__ == "__main__":
                 clsTrainer = CLSTrainer(args, text_data, cls_data)
                 kfold = StratifiedShuffleSplit(n_splits=args.n_folds, test_size=args.test_size / 100,
                                                random_state=args.seed)
+
+                # Путь к файлу метрик для текущего seed
+                metrics_file = f'results/fold_metrics_seed_{args.seed}.csv'
+                os.makedirs('results', exist_ok=True)
+
+                # Определяем, какие фолды уже обработаны
+                processed_folds = set()
+                if os.path.exists(metrics_file):
+                    try:
+                        existing_df = pd.read_csv(metrics_file)
+                        if 'fold' in existing_df.columns:
+                            processed_folds = set(existing_df['fold'].values)
+                            print(f"Found existing metrics for seed {args.seed}, already processed folds: {sorted(processed_folds)}")
+                    except Exception as e:
+                        print(f"Could not read existing metrics file: {e}, will overwrite if needed.")
+
                 fold = 0
-                all_metrics = []
+                all_metrics = []  # для итогового отчёта (опционально)
+
                 for train_indices, remain_indices in kfold.split(text_data, cls_data):
+                    # Пропускаем уже обработанные фолды
+                    if fold in processed_folds:
+                        print(f"Fold {fold} already processed, skipping.")
+                        fold += 1
+                        continue
+
                     valid_indices, test_indices = train_test_split(remain_indices, test_size=0.5,
                                                                    random_state=args.seed)
                     seed_dir = f"results/seed_{args.seed}"
                     os.makedirs(seed_dir, exist_ok=True)
+                    # Сохраняем индексы (перезаписываем, если уже есть)
                     np.save(os.path.join(seed_dir, f"fold_{fold}_train_indices.npy"), train_indices)
                     np.save(os.path.join(seed_dir, f"fold_{fold}_test_indices.npy"), test_indices)
                     np.save(os.path.join(seed_dir, f"fold_{fold}_valid_indices.npy"), valid_indices)
@@ -312,12 +336,21 @@ if __name__ == "__main__":
                         'phase1_test_exp_f1': phase1_exp_f1,
                         'phase2_test_cls_f1': phase2_cls_f1,
                     }
+                    # Сохраняем метрику этого фолда в CSV
+                    df_new = pd.DataFrame([fold_metrics])
+                    if not os.path.exists(metrics_file):
+                        df_new.to_csv(metrics_file, index=False)
+                    else:
+                        df_new.to_csv(metrics_file, mode='a', header=False, index=False)
+                    print(f"Saved metrics for fold {fold} to {metrics_file}")
+
                     all_metrics.append(fold_metrics)
                     print("--------------------------------------------------", flush=True)
                     fold += 1
                     torch.cuda.empty_cache()
 
-                os.makedirs('results', exist_ok=True)
-                df_metrics = pd.DataFrame(all_metrics)
-                df_metrics.to_csv(f'results/fold_metrics_seed_{args.seed}.csv', index=False)
-                print(f"Saved metrics for seed {args.seed} to results/fold_metrics_seed_{args.seed}.csv")
+                # После обработки всех фолдов выводим сообщение
+                if os.path.exists(metrics_file):
+                    print(f"All folds processed for seed {args.seed}. Metrics saved to {metrics_file}")
+                else:
+                    print(f"Warning: No metrics file created for seed {args.seed}")
