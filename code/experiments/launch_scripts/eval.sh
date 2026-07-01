@@ -3,7 +3,7 @@ set -euxo pipefail
 
 MODEL="${MODEL:-deepvk/USER-bge-m3}"
 DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"
-INPUT_FILE="${INPUT_FILE:-$DATA_DIR/train_ru.tsv}"
+INPUT_FILE="${INPUT_FILE:-$DATA_DIR/train_ru_small.tsv}"
 N_FOLDS="${N_FOLDS:-5}"
 SEED="${SEED:-12345}"
 
