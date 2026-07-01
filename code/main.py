@@ -72,6 +72,8 @@ if __name__ == "__main__":
     parser.add_argument('-weight_decay', type=float, default=0.01, help='weight decay for AdamW')
     parser.add_argument('-accumulation_steps', type=int, default=1, help='Gradient accumulation steps')
     parser.add_argument('-use_amp', action='store_true', help='Use automatic mixed precision')
+    parser.add_argument('-fold_index', type=int, default=-1,
+                        help='If set (>=0), only this fold will be processed (others skipped).')
 
     parser.add_argument('-class_weights', type=float, nargs='+', default=None,
                         help='Per-class weights as a space-separated list, ordered as in label_idx_map. '
@@ -303,7 +305,13 @@ if __name__ == "__main__":
                 all_metrics = []  # для итогового отчёта (опционально)
 
                 for train_indices, remain_indices in kfold.split(text_data, cls_data):
-                    # Пропускаем уже обработанные фолды
+                    # Если задан -fold_index, пропускаем все фолды, кроме указанного
+                    if args.fold_index >= 0 and fold != args.fold_index:
+                        print(f"Skipping fold {fold} because -fold_index={args.fold_index}")
+                        fold += 1
+                        continue
+
+                    # Пропускаем уже обработанные фолды (если не задан -fold_index или если задан, но мы хотим перезапустить, то можно убрать эту проверку, но оставим)
                     if fold in processed_folds:
                         print(f"Fold {fold} already processed, skipping.")
                         fold += 1
