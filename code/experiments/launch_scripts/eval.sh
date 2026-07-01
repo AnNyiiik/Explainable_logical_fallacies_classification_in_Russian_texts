@@ -3,7 +3,7 @@ set -euxo pipefail
 
 MODEL="${MODEL:-deepvk/USER-bge-m3}"
 DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"
-INPUT_FILE="${INPUT_FILE:-$DATA_DIR/train_ru_small.tsv}"
+INPUT_FILE="${INPUT_FILE:-$DATA_DIR/train_ru_small.tsv}"   # исправлено
 N_FOLDS="${N_FOLDS:-5}"
 SEED="${SEED:-12345}"
 
@@ -16,8 +16,9 @@ TEST_BATCH_SIZE="${TEST_BATCH_SIZE:-32}"
 MAX_LEN="${MAX_LEN:-512}"
 CLS_HIDDEN_SIZE="${CLS_HIDDEN_SIZE:-128}"
 EXP_HIDDEN_SIZE="${EXP_HIDDEN_SIZE:-128}"
-
 ACCUMULATION_STEPS="${ACCUMULATION_STEPS:-2}"
+WEIGHT_DECAY="${WEIGHT_DECAY:-0.0012}"   # добавлено
+CLASS_WEIGHTS="${CLASS_WEIGHTS:-1.0 1.6 1.0 1.4 1.0 1.1 1.0 1.0 1.6 1.0 1.0 1.6}"   # добавлено
 
 export WANDB_MODE=disabled
 
@@ -26,7 +27,7 @@ mkdir -p results
 echo "========================================="
 echo "Running cross-validation with seed=$SEED"
 echo "========================================="
-uv run python ./code/main.py -mode eval \
+python ./code/main.py -mode eval \
     -seed "$SEED" \
     -input_path "$INPUT_FILE" \
     -n_folds "$N_FOLDS" \
@@ -40,6 +41,8 @@ uv run python ./code/main.py -mode eval \
     -max_len "$MAX_LEN" \
     -cls_hidden_size "$CLS_HIDDEN_SIZE" \
     -exp_hidden_size "$EXP_HIDDEN_SIZE" \
-    -accumulation_steps "$ACCUMULATION_STEPS"
+    -accumulation_steps "$ACCUMULATION_STEPS" \
+    -weight_decay "$WEIGHT_DECAY" \
+    -class_weights $CLASS_WEIGHTS
 
 echo "Experiment completed. Results saved in ./results/"
