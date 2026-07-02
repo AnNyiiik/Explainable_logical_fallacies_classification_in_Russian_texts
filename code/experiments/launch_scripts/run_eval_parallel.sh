@@ -5,9 +5,9 @@ SEEDS=(12345 67891 54321 999 777)
 
 for SEED in "${SEEDS[@]}"; do
     echo "========================================="
-    echo "Running seed $SEED"
+    echo "Running roberta-large with seed $SEED"
     echo "========================================="
-    SEED=$SEED bash ./code/experiments/launch_scripts/eval.sh
+    SEED=$SEED bash ./code/experiments/launch_scripts/run_eval_parallel.sh
 done
 
-echo "All seeds completed. Results in ./results/"
+echo "All roberta-large experiments completed."

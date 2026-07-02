@@ -1,31 +1,32 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-MODEL="${MODEL:-deepvk/USER-bge-m3}"
+MODEL="${MODEL:-FacebookAI/roberta-large}"
 DATA_DIR="${DATA_DIR:-./data/multiclass_TACEI_data}"
-INPUT_FILE="${INPUT_FILE:-$DATA_DIR/train_ru_small.tsv}"   # исправлено
+INPUT_FILE="${INPUT_FILE:-$DATA_DIR/train_en.tsv}"
 N_FOLDS="${N_FOLDS:-5}"
 SEED="${SEED:-12345}"
 
 N_EPOCHS="${N_EPOCHS:-5}"
-PATIENCE="${PATIENCE:-3}"
+PATIENCE="${PATIENCE:-10}"
 LR="${LR:-2e-5}"
 EXP_WEIGHT="${EXP_WEIGHT:-0.2}"
-TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-4}"
+TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-16}"
 TEST_BATCH_SIZE="${TEST_BATCH_SIZE:-32}"
 MAX_LEN="${MAX_LEN:-512}"
 CLS_HIDDEN_SIZE="${CLS_HIDDEN_SIZE:-128}"
 EXP_HIDDEN_SIZE="${EXP_HIDDEN_SIZE:-128}"
-ACCUMULATION_STEPS="${ACCUMULATION_STEPS:-2}"
-WEIGHT_DECAY="${WEIGHT_DECAY:-0.0012}"   # добавлено
-CLASS_WEIGHTS="${CLASS_WEIGHTS:-1.0 1.6 1.0 1.4 1.0 1.1 1.0 1.0 1.6 1.0 1.0 1.6}"   # добавлено
+ACCUMULATION_STEPS="${ACCUMULATION_STEPS:-1}"
+WEIGHT_DECAY="${WEIGHT_DECAY:-5.32e-4}"
+
+CLASS_WEIGHTS="${CLASS_WEIGHTS:-1.0 2.4 1.0 1.6 1.0 1.3 1.0 1.0 1.4 1.0 1.0 2.4}"
 
 export WANDB_MODE=disabled
 
 mkdir -p results
 
 echo "========================================="
-echo "Running cross-validation with seed=$SEED"
+echo "Running roberta-large cross-validation with seed=$SEED"
 echo "========================================="
 python ./code/main.py -mode eval \
     -seed "$SEED" \
