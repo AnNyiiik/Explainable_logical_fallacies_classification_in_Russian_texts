@@ -210,11 +210,31 @@ def text_to_exp_labels(org_text, explan_text):
         print("Exception", e, flush=True)
     return labels
 
-def map_exp_labels(tokenizer, sents, exp_labels):
-    tokenized_sents = [' '.join(tokenizer.tokenize(sent)) for sent in sents]
-    tokenized_exps = [[' '.join(tokenizer.tokenize(exp)) for exp in exps] for exps in exp_labels]
+def map_exp_labels(tokenizer, sents, exp_labels, max_len=None):
+    tokenized_sents = []
+    for sent in sents:
+        tokens = tokenizer.tokenize(sent)
+        if max_len is not None and len(tokens) > max_len:
+            tokens = tokens[:max_len]
+        tokenized_sents.append(' '.join(tokens))
+
+    tokenized_exps = []
+    for exps in exp_labels:
+        tokenized_exp_list = []
+        for exp in exps:
+            tokens = tokenizer.tokenize(exp)
+            if max_len is not None and len(tokens) > max_len:
+                tokens = tokens[:max_len]
+            tokenized_exp_list.append(' '.join(tokens))
+        tokenized_exps.append(tokenized_exp_list)
+
     exp_labels = [text_to_exp_labels(sent, exp) for sent, exp in zip(tokenized_sents, tokenized_exps)]
-    max_length = max([len(sent.split()) for sent in tokenized_sents])
+
+    if max_len is not None:
+        max_length = max_len
+    else:
+        max_length = max([len(sent.split()) for sent in tokenized_sents]) if tokenized_sents else 0
+
     exp_labels = [label + [0] * (max_length - len(label)) for label in exp_labels]
     return exp_labels
 

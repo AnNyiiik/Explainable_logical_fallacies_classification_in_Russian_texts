@@ -93,7 +93,7 @@ class MTLTrainer:
             self.cls_labels = torch.tensor(cls_labels, dtype=torch.long)
             self.tokenized_data, self.input_ids, self.attention_masks, self.tokenized_data_slides = \
                 utils.tokenize_text(self.tokenizer, self.data, self.tokenizer.pad_token, max_len=self.args.max_len)
-            self.exp_labels_mapping = utils.map_exp_labels(self.tokenizer, self.data, exp_labels)
+            self.exp_labels_mapping = utils.map_exp_labels(self.tokenizer, self.data, exp_labels, max_len=self.args.max_len)
             self.tokenized_data, self.input_ids = np.array(self.tokenized_data, dtype=object), torch.tensor(self.input_ids, dtype=torch.long)
             self.attention_masks, self.tokenized_data_slides = torch.tensor(self.attention_masks, dtype=torch.long), np.array(self.tokenized_data_slides, dtype=object)
             self.exp_labels_mapping = torch.tensor(self.exp_labels_mapping, dtype=torch.long)
