@@ -1,0 +1,18 @@
+{
+  "total_examples": 652,
+  "num_classes": 12,
+  "class_counts": {
+    "ad hominem": 80,
+    "fallacy of credibility": 43,
+    "faulty generalization": 107,
+    "circular reasoning": 56,
+    "ad populum": 69,
+    "false causality": 62,
+    "false dilemma": 43,
+    "fallacy of relevance": 48,
+    "fallacy of extension": 41,
+    "equivocation": 15,
+    "intentional": 41,
+    "appeal to emotion": 47
+  }
+}

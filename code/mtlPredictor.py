@@ -6,11 +6,13 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from collections import OrderedDict
 import torch.nn as nn
 import numpy as np
+import pandas as pd
 import random
 import utils
 import time
 import sys
 import os
+import wandb
 from utils import per_class_classification_analysis, per_class_rationale_analysis
 from contextlib import nullcontext
 
@@ -93,7 +95,7 @@ class MTLTrainer:
             self.cls_labels = torch.tensor(cls_labels, dtype=torch.long)
             self.tokenized_data, self.input_ids, self.attention_masks, self.tokenized_data_slides = \
                 utils.tokenize_text(self.tokenizer, self.data, self.tokenizer.pad_token, max_len=self.args.max_len)
-            self.exp_labels_mapping = utils.map_exp_labels(self.tokenizer, self.data, exp_labels, max_len=self.args.max_len)
+            self.exp_labels_mapping = utils.map_exp_labels(self.tokenizer, self.data, exp_labels)
             self.tokenized_data, self.input_ids = np.array(self.tokenized_data, dtype=object), torch.tensor(self.input_ids, dtype=torch.long)
             self.attention_masks, self.tokenized_data_slides = torch.tensor(self.attention_masks, dtype=torch.long), np.array(self.tokenized_data_slides, dtype=object)
             self.exp_labels_mapping = torch.tensor(self.exp_labels_mapping, dtype=torch.long)
@@ -172,19 +174,62 @@ class MTLTrainer:
                 batch_num += 1
         return cls_preds, exp_preds, cls_probs, exp_probs, total_loss / batch_num if batch_num > 0 else 0
 
-    def eval(self, train_indices=None, valid_indices=None, test_indices=None, fold=None):
+    @staticmethod
+    def _mask_to_text(text, mask):
+        """Reconstruct the substring a word-level 0/1 mask selects.
+
+        Mirrors how ``test_exp_pred_data`` is built: the mask is aligned with
+        the whitespace tokens including the leading CLS token, and the first
+        and last tokens are never selected.
+        """
+        tokens = str(text).split(' ')
+        upper = min(len(tokens) - 1, len(mask))
+        return ' '.join(tokens[i] for i in range(1, upper) if mask[i] == 1)
+
+    def _save_test_predictions(self, path, test_indices, test_data, test_cls_labels,
+                               test_cls_pred_labels, test_exp_true_labels,
+                               test_exp_pred_labels_pooled, test_exp_pred_data,
+                               label_idx_to_name):
+        """One row per test example of the current fold.
+
+        ``index`` is the row's position in the de-duplicated dataset array --
+        the value that came in through ``test_indices`` -- so the file joins
+        back onto the source data.
+        """
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        idx = np.asarray(test_indices)
+        rows = []
+        for i in range(len(test_data)):
+            true_idx = int(test_cls_labels[i])
+            pred_idx = int(test_cls_pred_labels[i])
+            true_mask = list(test_exp_true_labels[i])
+            pred_mask = list(test_exp_pred_labels_pooled[i])
+            rows.append({
+                'index': int(idx[i]),
+                'fold_position': i,
+                'text': test_data[i],
+                'true_label_idx': true_idx,
+                'true_label': label_idx_to_name.get(true_idx, str(true_idx)),
+                'pred_label_idx': pred_idx,
+                'pred_label': label_idx_to_name.get(pred_idx, str(pred_idx)),
+                'correct': int(true_idx == pred_idx),
+                'true_rationale_mask': ' '.join(str(int(v)) for v in true_mask),
+                'pred_rationale_mask': ' '.join(str(int(v)) for v in pred_mask),
+                'true_rationale_text': self._mask_to_text(test_data[i], true_mask),
+                'pred_rationale_text': self._mask_to_text(test_data[i], pred_mask),
+                'pred_masked_text': test_exp_pred_data[i],
+            })
+        pd.DataFrame(rows).to_csv(path, index=False)
+        print("Saved %d Phase 1 test predictions to %s" % (len(rows), path), flush=True)
+
+    def eval(self, train_indices=None, valid_indices=None, test_indices=None,
+             save_predictions_path=None):
         train_data, valid_data, test_data = self.data[train_indices], self.data[valid_indices], self.data[test_indices]
-        train_input_ids, valid_input_ids, test_input_ids = self.input_ids[train_indices], self.input_ids[valid_indices], \
-        self.input_ids[test_indices]
-        train_attention_masks, valid_attention_masks, test_attention_masks = self.attention_masks[train_indices], \
-        self.attention_masks[valid_indices], self.attention_masks[test_indices]
-        train_tokenized_data_slides, valid_tokenized_data_slides, test_tokenized_data_slides = \
-        self.tokenized_data_slides[train_indices], self.tokenized_data_slides[valid_indices], \
-        self.tokenized_data_slides[test_indices]
-        train_exp_labels, valid_exp_labels, test_exp_labels = self.exp_labels_mapping[train_indices], \
-        self.exp_labels_mapping[valid_indices], self.exp_labels_mapping[test_indices]
-        train_cls_labels, valid_cls_labels, test_cls_labels = self.cls_labels[train_indices], self.cls_labels[
-            valid_indices], self.cls_labels[test_indices]
+        train_input_ids, valid_input_ids, test_input_ids = self.input_ids[train_indices], self.input_ids[valid_indices], self.input_ids[test_indices]
+        train_attention_masks, valid_attention_masks, test_attention_masks = self.attention_masks[train_indices], self.attention_masks[valid_indices], self.attention_masks[test_indices]
+        train_tokenized_data_slides, valid_tokenized_data_slides, test_tokenized_data_slides = self.tokenized_data_slides[train_indices], self.tokenized_data_slides[valid_indices], self.tokenized_data_slides[test_indices]
+        train_exp_labels, valid_exp_labels, test_exp_labels = self.exp_labels_mapping[train_indices], self.exp_labels_mapping[valid_indices], self.exp_labels_mapping[test_indices]
+        train_cls_labels, valid_cls_labels, test_cls_labels = self.cls_labels[train_indices], self.cls_labels[valid_indices], self.cls_labels[test_indices]
 
         self.model = MTLModel(bert_config=self.args.model_config, cls_hidden_size=self.args.cls_hidden_size,
                               exp_hidden_size=self.args.exp_hidden_size, num_classes=self.num_classes)
@@ -227,15 +272,23 @@ class MTLTrainer:
                 cls_criterion, exp_criterion, exp_weight, self.args.test_batch_size)
             exp_true = utils.max_pooling(valid_exp_labels, valid_tokenized_data_slides, valid_data)
             exp_pred = utils.max_pooling(exp_pred_labels, valid_tokenized_data_slides, valid_data)
-            exp_f1 = np.mean(
-                [f1_score(y_true, y_pred) for y_true, y_pred in zip(exp_true, exp_pred) if sum(y_true) != 0])
+            exp_f1 = np.mean([f1_score(y_true, y_pred) for y_true, y_pred in zip(exp_true, exp_pred) if sum(y_true) != 0])
             cls_f1 = f1_score(valid_cls_labels, cls_pred_labels, average='macro')
 
             print("Epoch: %d, train_loss: %.3f, valid_loss: %.3f, valid_cls_f1: %.3f, time: %.3f" % (epoch,
                                                                                                      train_loss,
                                                                                                      valid_loss, cls_f1,
-                                                                                                     time.time() - begin_time),
-                  flush=True)
+                                                                                                     time.time() - begin_time),flush=True)
+
+            if self.args.mode != 'eval':
+                wandb.log({
+                    "epoch": epoch,
+                    "train_loss": train_loss,
+                    "valid_loss": valid_loss,
+                    "valid_cls_f1_macro": cls_f1,
+                    "valid_exp_token_f1": exp_f1,
+                    "learning_rate": self.scheduler.get_last_lr()[0]
+                })
 
             if best_loss > valid_loss:
                 best_loss = valid_loss
@@ -243,8 +296,7 @@ class MTLTrainer:
                 best_model_state_dict = OrderedDict({k: v.cpu() for k, v in self.model.state_dict().items()})
                 if hasattr(self.args, 'saved_model_path') and self.args.saved_model_path and self.args.mode != 'eval':
                     checkpoint_path = os.path.join(self.args.saved_model_path, f"phase1_best_checkpoint.pt")
-                    save_full_checkpoint(self.model, self.optimizer, self.scheduler, epoch, best_loss, self.args,
-                                         checkpoint_path)
+                    save_full_checkpoint(self.model, self.optimizer, self.scheduler, epoch, best_loss, self.args, checkpoint_path)
 
             if epoch - best_epoch['epoch'] > self.args.patience:
                 break
@@ -261,8 +313,7 @@ class MTLTrainer:
 
         train_exp_pred_data = []
         new_train_labels = []
-        for data, exp, cls_pred, cls_true in zip(train_data, train_exp_pred_labels, train_cls_pred_labels,
-                                                 train_cls_labels):
+        for data, exp, cls_pred, cls_true in zip(train_data, train_exp_pred_labels, train_cls_pred_labels, train_cls_labels):
             if (self.args.full_train == False) and (cls_pred != cls_true):
                 continue
             new_train_labels.append(cls_true)
@@ -312,12 +363,9 @@ class MTLTrainer:
             test_exp_pred_data.append(' '.join(masked_words).strip())
 
         test_cls_f1 = f1_score(test_cls_labels, test_cls_pred_labels, average='macro')
-        test_exp_f1 = np.mean(
-            [f1_score(y_true, y_pred) for y_true, y_pred in zip(test_exp_true_labels, test_exp_pred_labels_pooled)])
-        test_exp_p = np.mean([precision_score(y_true, y_pred) for y_true, y_pred in
-                              zip(test_exp_true_labels, test_exp_pred_labels_pooled)])
-        test_exp_r = np.mean(
-            [recall_score(y_true, y_pred) for y_true, y_pred in zip(test_exp_true_labels, test_exp_pred_labels_pooled)])
+        test_exp_f1 = np.mean([f1_score(y_true, y_pred) for y_true, y_pred in zip(test_exp_true_labels, test_exp_pred_labels_pooled)])
+        test_exp_p = np.mean([precision_score(y_true, y_pred) for y_true, y_pred in zip(test_exp_true_labels, test_exp_pred_labels_pooled)])
+        test_exp_r = np.mean([recall_score(y_true, y_pred) for y_true, y_pred in zip(test_exp_true_labels, test_exp_pred_labels_pooled)])
 
         print("++++++++++++++++++++++++++++++++++++++++++++++++++")
         print("++%s" % "Test results: ")
@@ -325,8 +373,15 @@ class MTLTrainer:
         print("++ Exp F1: %.4f, exp_p: %.4f, exp_r: %.4f" % (test_exp_f1, test_exp_p, test_exp_r))
         print("++++++++++++++++++++++++++++++++++++++++++++++++++", flush=True)
 
-        label_idx_to_name = {v: k for k, v in self.args.label_idx_map.items()} if hasattr(self.args,
-                                                                                          'label_idx_map') else {}
+        if self.args.mode != 'eval':
+            wandb.log({
+                "test_cls_f1_macro": test_cls_f1,
+                "test_exp_token_f1": test_exp_f1,
+                "test_exp_token_precision": test_exp_p,
+                "test_exp_token_recall": test_exp_r
+            })
+
+        label_idx_to_name = {v: k for k, v in self.args.label_idx_map.items()} if hasattr(self.args, 'label_idx_map') else {}
         if label_idx_to_name:
             class_names = [label_idx_to_name[i] for i in range(self.num_classes) if i in label_idx_to_name]
         else:
@@ -337,26 +392,29 @@ class MTLTrainer:
         else:
             test_cls_labels_list = None
 
-        # Формируем пути для сохранения per-class отчётов
-        if fold is not None and hasattr(self.args, 'seed'):
-            seed_dir = f"results/seed_{self.args.seed}"
-            os.makedirs(seed_dir, exist_ok=True)
-            csv_cls_path = os.path.join(seed_dir, f"per_class_cls_fold_{fold}.csv")
-            csv_exp_path = os.path.join(seed_dir, f"per_class_exp_fold_{fold}.csv")
-        else:
-            csv_cls_path = None
-            csv_exp_path = None
-
         print("\n" + "🔍 " + "=" * 67)
         per_class_classification_analysis(
             y_true=test_cls_labels, y_pred=test_cls_pred_labels, class_names=class_names,
-            phase_name="Phase1_Test", logger=None, save_csv_path=csv_cls_path)
+            phase_name="Phase1_Test", logger=wandb.log if self.args.mode != 'eval' else None)
         print("\n" + "🔍 " + "=" * 67)
         per_class_rationale_analysis(
             true_rationales=test_exp_true_labels, pred_rationales=test_exp_pred_labels_pooled,
             class_labels=test_cls_labels_list, class_names=class_names,
-            phase_name="Phase1_Rationale", logger=None, label_idx_to_name=label_idx_to_name,
-            save_csv_path=csv_exp_path)
+            phase_name="Phase1_Rationale", logger=wandb.log if self.args.mode != 'eval' else None, label_idx_to_name=label_idx_to_name)
+
+        # Expose the phase-1 fold metrics so main.py can record them, and dump
+        # the per-example predictions together with their dataset indices.
+        self.last_eval_metrics = {
+            'phase1_test_cls_f1': float(test_cls_f1),
+            'phase1_test_exp_f1': float(test_exp_f1),
+            'phase1_test_exp_p': float(test_exp_p),
+            'phase1_test_exp_r': float(test_exp_r),
+        }
+        if save_predictions_path is not None and test_indices is not None:
+            self._save_test_predictions(
+                save_predictions_path, test_indices, test_data, test_cls_labels,
+                test_cls_pred_labels, test_exp_true_labels,
+                test_exp_pred_labels_pooled, test_exp_pred_data, label_idx_to_name)
 
         self.model.cpu()
         self.optimizer = None
@@ -397,6 +455,11 @@ class MTLTrainer:
                                   cls_criterion, exp_criterion, exp_weight,
                                   self.args.train_batch_size, accumulation_steps)
             print("Epoch: %d, train_loss: %.3f, time: %.3f" % (epoch, train_loss, time.time() - begin_time), flush=True)
+            wandb.log({
+                "epoch": epoch,
+                "train_loss": train_loss,
+                "learning_rate": self.scheduler.get_last_lr()[0]
+            })
         cls_pred_labels, exp_pred_labels, _, _, _ = self.predict(self.input_ids, self.attention_masks,
                                                                  cls_labels, exp_labels, cls_criterion, exp_criterion,
                                                                  exp_weight, self.args.test_batch_size)
@@ -405,6 +468,10 @@ class MTLTrainer:
         cls_f1 = f1_score(cls_labels, cls_pred_labels, average='macro')
         exp_f1 = np.mean([f1_score(y_true, y_pred) for y_true, y_pred in zip(exp_true_labels, exp_pred_labels)])
         print("++ Training CLS F1: {}, EXP F1: {}".format(cls_f1, exp_f1), flush=True)
+        wandb.log({
+            "final_train_cls_f1_macro": cls_f1,
+            "final_train_exp_token_f1": exp_f1
+        })
         exp_pred_data = []
         new_labels = []
         for data, exp, cls_pred, cls_true in zip(self.data, exp_pred_labels, cls_pred_labels, cls_labels):
@@ -421,6 +488,23 @@ class MTLTrainer:
         if saved_model_path is not None:
             print("Save model to path: {}".format(saved_model_path), flush=True)
             torch.save(self.model.state_dict(), saved_model_path)
+
+            # The bare state_dict cannot be reloaded without knowing the encoder,
+            # the label ordering and the head sizes, so write those alongside it.
+            bundle_path = os.path.splitext(saved_model_path)[0] + "_final.pt"
+            bundle = {
+                'model_state_dict': self.model.state_dict(),
+                'model_config': getattr(self.args, 'model_config', None),
+                'num_classes': int(getattr(self.args, 'num_classes', 0)) or None,
+                'max_len': getattr(self.args, 'max_len', None),
+                'cls_hidden_size': getattr(self.args, 'cls_hidden_size', None),
+                'exp_hidden_size': getattr(self.args, 'exp_hidden_size', None),
+                'label_idx_map': getattr(self.args, 'label_idx_map', None),
+                'seed': getattr(self.args, 'seed', None),
+                'best_epoch': best_epoch,
+            }
+            torch.save(bundle, bundle_path)
+            print("Saved final model bundle to {}".format(bundle_path), flush=True)
         return np.array(exp_pred_data), np.array(new_labels)
 
     def load(self, num_classes=6, saved_model_path=None):

@@ -6,6 +6,7 @@ import random
 import numpy as np
 import pandas as pd
 import utils
+import wandb
 import transformers.file_utils as hf_file_utils
 from mtlPredictor import MTLTrainer
 from classPredictor import CLSTrainer
@@ -14,6 +15,7 @@ from transformers import logging
 
 logging.set_verbosity_error()
 import warnings
+
 warnings.filterwarnings("ignore")
 import time
 
@@ -32,15 +34,20 @@ DEFAULT_CLASS_WEIGHTS = [
     2.0,
 ]
 
+
 def patch_hf_relative_redirects():
     if not hasattr(hf_file_utils, "http_get"):
         return
+
     original_http_get = hf_file_utils.http_get
+
     def patched_http_get(url, temp_file, proxies=None, resume_size=0, headers=None):
         if isinstance(url, str) and url.startswith('/'):
             url = 'https://huggingface.co' + url
         return original_http_get(url, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
+
     hf_file_utils.http_get = patched_http_get
+
 
 if __name__ == "__main__":
     patch_hf_relative_redirects()
@@ -49,6 +56,11 @@ if __name__ == "__main__":
 
     parser.add_argument('-input_path', type=str, default='data/train.tsv')
     parser.add_argument('-seed', type=int, default=42, help='Global random seed')
+    parser.add_argument('-folds', type=str, default=None,
+                        help='Comma-separated fold indices to run, e.g. "0,2,4". '
+                             'Folds are enumerated identically regardless of this '
+                             'selection, so a subset gives the same result as a full '
+                             'run. Use it to spread folds across GPUs.')
     parser.add_argument('-model_config', type=str, default='vinai/bertweet-base')
     parser.add_argument('-cls_hidden_size', type=int, default=128)
     parser.add_argument('-exp_hidden_size', type=int, default=128)
@@ -69,18 +81,20 @@ if __name__ == "__main__":
     parser.add_argument('-input_new_data_path', type=str, default="data/input.csv")
     parser.add_argument('-output_new_data_path', type=str, default="data/output.csv")
     parser.add_argument('-saved_model_path', type=str, default="data/saved_models/")
+    parser.add_argument('-wandb_api_key', type=str, default=None, help='Weights & Biases API key')
     parser.add_argument('-weight_decay', type=float, default=0.01, help='weight decay for AdamW')
     parser.add_argument('-accumulation_steps', type=int, default=1, help='Gradient accumulation steps')
     parser.add_argument('-use_amp', action='store_true', help='Use automatic mixed precision')
-    parser.add_argument('-fold_index', type=int, default=-1,
-                        help='If set (>=0), only this fold will be processed (others skipped).')
 
     parser.add_argument('-class_weights', type=float, nargs='+', default=None,
                         help='Per-class weights as a space-separated list, ordered as in label_idx_map. '
                              'If omitted, DEFAULT_CLASS_WEIGHTS is used.')
+
     parser.add_argument('-full_train', type=str, default=True,
                         help='True: full data, False: only use the correct prediction from 1st phase for training in 2nd phase')
+
     parser.add_argument('-mode', type=str, default='eval', help='train: train model, eval:evaluate with n-folds, prediction: make prediction on new data')
+
     parser.add_argument('-train_file', type=str, default=None, help='Path to pre-split train file')
     parser.add_argument('-valid_file', type=str, default=None, help='Path to pre-split validation file')
     parser.add_argument('-test_file', type=str, default=None, help='Path to pre-split test file')
@@ -124,7 +138,40 @@ if __name__ == "__main__":
     print("Class weights:", args.class_weights.tolist(), flush=True)
 
     args.label_idx_map = label_idx_map
+
     idx_label_map = {idx: label for label, idx in label_idx_map.items()}
+
+    if args.mode == 'eval':
+        wandb.init(
+            project="TACEI_experiment",
+            mode="disabled",
+            config={
+                "model_config": args.model_config,
+                "learning_rate": args.lr,
+                "exp_weight": args.exp_weight,
+                "train_batch_size": args.train_batch_size,
+                "n_epochs": args.n_epochs,
+                "patience": args.patience,
+                "cls_hidden_size": args.cls_hidden_size,
+                "exp_hidden_size": args.exp_hidden_size,
+                "class_weights": args.class_weights.tolist(),
+            }
+        )
+    else:
+        wandb.init(
+            project="TACEI_experiment",
+            config={
+                "model_config": args.model_config,
+                "learning_rate": args.lr,
+                "exp_weight": args.exp_weight,
+                "train_batch_size": args.train_batch_size,
+                "n_epochs": args.n_epochs,
+                "patience": args.patience,
+                "cls_hidden_size": args.cls_hidden_size,
+                "exp_hidden_size": args.exp_hidden_size,
+                "class_weights": args.class_weights.tolist(),
+            }
+        )
 
     if args.mode == 'prediction':
         mtlTrainer = MTLTrainer(args)
@@ -285,80 +332,90 @@ if __name__ == "__main__":
                 clsTrainer = CLSTrainer(args, text_data, cls_data)
                 kfold = StratifiedShuffleSplit(n_splits=args.n_folds, test_size=args.test_size / 100,
                                                random_state=args.seed)
-
-                # Путь к файлу метрик для текущего seed
-                metrics_file = f'results/fold_metrics_seed_{args.seed}.csv'
-                os.makedirs('results', exist_ok=True)
-
-                # Определяем, какие фолды уже обработаны
-                processed_folds = set()
-                if os.path.exists(metrics_file):
-                    try:
-                        existing_df = pd.read_csv(metrics_file)
-                        if 'fold' in existing_df.columns:
-                            processed_folds = set(existing_df['fold'].values)
-                            print(f"Found existing metrics for seed {args.seed}, already processed folds: {sorted(processed_folds)}")
-                    except Exception as e:
-                        print(f"Could not read existing metrics file: {e}, will overwrite if needed.")
-
                 fold = 0
-                all_metrics = []  # для итогового отчёта (опционально)
+                all_metrics = []
+                predictions_dir = os.path.join('results', f'seed_{args.seed}', 'predictions')
+                os.makedirs(predictions_dir, exist_ok=True)
+                idx_to_label = {v: k for k, v in label_idx_map.items()}
+                selected_folds = (None if not args.folds
+                                  else {int(x) for x in args.folds.split(',') if x.strip() != ''})
+                if selected_folds is not None:
+                    print(f"Running folds {sorted(selected_folds)} only", flush=True)
+                metrics_dir = os.path.join('results', f'seed_{args.seed}', 'metrics')
+                os.makedirs(metrics_dir, exist_ok=True)
 
                 for train_indices, remain_indices in kfold.split(text_data, cls_data):
-                    # Если задан -fold_index, пропускаем все фолды, кроме указанного
-                    if args.fold_index >= 0 and fold != args.fold_index:
-                        print(f"Skipping fold {fold} because -fold_index={args.fold_index}")
+                    if selected_folds is not None and fold not in selected_folds:
                         fold += 1
                         continue
-
-                    # Пропускаем уже обработанные фолды (если не задан -fold_index или если задан, но мы хотим перезапустить, то можно убрать эту проверку, но оставим)
-                    if fold in processed_folds:
-                        print(f"Fold {fold} already processed, skipping.")
-                        fold += 1
-                        continue
-
+                    # Stratify the inner split too. Without it the class balance that
+                    # StratifiedShuffleSplit establishes is half thrown away again when
+                    # the held-out portion is cut into validation and test.
                     valid_indices, test_indices = train_test_split(remain_indices, test_size=0.5,
-                                                                   random_state=args.seed)
-                    seed_dir = f"results/seed_{args.seed}"
-                    os.makedirs(seed_dir, exist_ok=True)
-                    # Сохраняем индексы (перезаписываем, если уже есть)
-                    np.save(os.path.join(seed_dir, f"fold_{fold}_train_indices.npy"), train_indices)
-                    np.save(os.path.join(seed_dir, f"fold_{fold}_test_indices.npy"), test_indices)
-                    np.save(os.path.join(seed_dir, f"fold_{fold}_valid_indices.npy"), valid_indices)
-
+                                                                   random_state=args.seed,
+                                                                   stratify=cls_data[remain_indices])
                     print("---------------------FOLD {}-----------------------".format(fold))
                     print(">>>>> Phase 1...........", flush=True)
                     train_exp_pred_data, train_labels, valid_exp_pred_data, \
-                        valid_labels, test_exp_pred_data, test_labels, phase1_cls_f1, phase1_exp_f1 = mtlTrainer.eval(
-                        train_indices, valid_indices, test_indices, fold=fold
-                    )
+                        valid_labels, test_exp_pred_data, test_labels = mtlTrainer.eval(
+                            train_indices, valid_indices, test_indices,
+                            save_predictions_path=os.path.join(
+                                predictions_dir, f'fold{fold}_phase1_test_predictions.csv'))
+
                     print(">>>>> Phase 2............", flush=True)
-                    phase2_cls_f1, _, _ = clsTrainer.eval(train_exp_pred_data, train_labels,
-                                                          valid_exp_pred_data, valid_labels,
-                                                          test_exp_pred_data, test_labels)
+                    phase2_cls_f1, phase2_pred, phase2_probs = clsTrainer.eval(
+                        train_exp_pred_data, train_labels,
+                        valid_exp_pred_data, valid_labels,
+                        test_exp_pred_data, test_labels)
+
+                    # Phase 2 consumes the rationale-masked texts from Phase 1 in the
+                    # same order as test_indices, so the indices carry over directly.
+                    if phase2_pred is not None:
+                        n = len(phase2_pred)
+                        phase2_rows = pd.DataFrame({
+                            'index': np.asarray(test_indices)[:n],
+                            'fold_position': np.arange(n),
+                            'masked_text': test_exp_pred_data[:n],
+                            'true_label_idx': [int(x) for x in test_labels[:n]],
+                            'true_label': [idx_to_label.get(int(x), str(int(x)))
+                                           for x in test_labels[:n]],
+                            'pred_label_idx': [int(x) for x in phase2_pred],
+                            'pred_label': [idx_to_label.get(int(x), str(int(x))) for x in phase2_pred],
+                        })
+                        if phase2_probs is not None:
+                            phase2_rows['confidence'] = [round(float(x), 6) for x in phase2_probs][:n]
+                        phase2_rows['correct'] = (
+                            phase2_rows['true_label_idx'] == phase2_rows['pred_label_idx']).astype(int)
+                        phase2_path = os.path.join(
+                            predictions_dir, f'fold{fold}_phase2_test_predictions.csv')
+                        phase2_rows.to_csv(phase2_path, index=False)
+                        print(f"Saved {len(phase2_rows)} Phase 2 test predictions to {phase2_path}",
+                              flush=True)
+
+                    np.save(os.path.join(predictions_dir, f'fold{fold}_test_indices.npy'),
+                            np.asarray(test_indices))
 
                     fold_metrics = {
                         'seed': args.seed,
                         'fold': fold,
-                        'phase1_test_cls_f1': phase1_cls_f1,
-                        'phase1_test_exp_f1': phase1_exp_f1,
                         'phase2_test_cls_f1': phase2_cls_f1,
                     }
-                    # Сохраняем метрику этого фолда в CSV
-                    df_new = pd.DataFrame([fold_metrics])
-                    if not os.path.exists(metrics_file):
-                        df_new.to_csv(metrics_file, index=False)
-                    else:
-                        df_new.to_csv(metrics_file, mode='a', header=False, index=False)
-                    print(f"Saved metrics for fold {fold} to {metrics_file}")
-
+                    fold_metrics.update(getattr(mtlTrainer, 'last_eval_metrics', {}))
                     all_metrics.append(fold_metrics)
+                    # One file per fold: two processes writing the same seed cannot
+                    # clobber each other, and the pieces are merged afterwards.
+                    pd.DataFrame([fold_metrics]).to_csv(
+                        os.path.join(metrics_dir, f'fold{fold}.csv'), index=False)
                     print("--------------------------------------------------", flush=True)
                     fold += 1
                     torch.cuda.empty_cache()
 
-                # После обработки всех фолдов выводим сообщение
-                if os.path.exists(metrics_file):
-                    print(f"All folds processed for seed {args.seed}. Metrics saved to {metrics_file}")
+                os.makedirs('results', exist_ok=True)
+                df_metrics = pd.DataFrame(all_metrics)
+                if selected_folds is None:
+                    df_metrics.to_csv(f'results/fold_metrics_seed_{args.seed}.csv', index=False)
                 else:
-                    print(f"Warning: No metrics file created for seed {args.seed}")
+                    print(f"Ran a subset of folds; per-fold metrics are in {metrics_dir}. "
+                          f"Merge them once every fold has finished.", flush=True)
+                print(f"Saved metrics for seed {args.seed} to results/fold_metrics_seed_{args.seed}.csv")
+                print(f"Saved per-fold test predictions to {predictions_dir}/")
